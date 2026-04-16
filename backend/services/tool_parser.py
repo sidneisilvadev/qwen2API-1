@@ -95,7 +95,7 @@ def should_block_tool_call(history_messages: list, tool_name: str, input_data) -
             else:
                 return False, ""
         if same_count >= 2:
-            return True, f"重复调用相同工具与参数：{tool_name}"
+            return True, f"Blocked duplicate tool call with same arguments: {tool_name}"
     return False, ""
 
 
@@ -134,7 +134,7 @@ def parse_tool_calls(answer: str, tools: list):
     if not tools:
         return [{"type": "text", "text": answer}], "end_turn"
     tool_names = {t.get("name") for t in tools if t.get("name")}
-    log.debug(f"[ToolParse] 原始回复({len(answer)}字): {answer[:200]!r}")
+    log.debug(f"[ToolParse] Raw reply({len(answer)} chars): {answer[:200]!r}")
 
     tc_m = re.search(r'##TOOL_CALL##\s*(.*?)\s*##END_CALL##', answer, re.DOTALL | re.IGNORECASE)
     if tc_m:
@@ -143,10 +143,10 @@ def parse_tool_calls(answer: str, tools: list):
             name = obj.get("name", "")
             inp = parse_tool_input(obj.get("input", obj.get("args", obj.get("arguments", obj.get("parameters", {})))))
             prefix = answer[:tc_m.start()].strip()
-            log.info(f"[ToolParse] ✓ ##TOOL_CALL## 格式: name={name!r}, input={str(inp)[:120]}")
+            log.info(f"[ToolParse] - Success: ##TOOL_CALL## format: name={name!r}, input={str(inp)[:120]}")
             return make_tool_block(name, inp, tool_names, prefix)
         except (json.JSONDecodeError, ValueError) as e:
-            log.warning(f"[ToolParse] ##TOOL_CALL## 格式解析失败: {e}, content={tc_m.group(1)[:100]!r}")
+            log.warning(f"[ToolParse] ##TOOL_CALL## parse failed: {e}, content={tc_m.group(1)[:100]!r}")
 
     xml_m = re.search(r'<tool_call>\s*(.*?)\s*</tool_call>', answer, re.DOTALL | re.IGNORECASE)
     if xml_m:
@@ -155,10 +155,10 @@ def parse_tool_calls(answer: str, tools: list):
             name = obj.get("name", "")
             inp = parse_tool_input(obj.get("input", obj.get("args", obj.get("arguments", obj.get("parameters", {})))))
             prefix = answer[:xml_m.start()].strip()
-            log.info(f"[ToolParse] ✓ XML格式 <tool_call>: name={name!r}, input={str(inp)[:120]}")
+            log.info(f"[ToolParse] - Success: XML format <tool_call>: name={name!r}, input={str(inp)[:120]}")
             return make_tool_block(name, inp, tool_names, prefix)
         except (json.JSONDecodeError, ValueError) as e:
-            log.warning(f"[ToolParse] XML格式解析失败: {e}, content={xml_m.group(1)[:100]!r}")
+            log.warning(f"[ToolParse] XML format parse failed: {e}, content={xml_m.group(1)[:100]!r}")
 
     cb_m = re.search(r'```tool_call\s*\n(.*?)\n```', answer, re.DOTALL)
     if cb_m:
@@ -167,10 +167,10 @@ def parse_tool_calls(answer: str, tools: list):
             name = obj.get("name", "")
             inp = parse_tool_input(obj.get("input", obj.get("args", {})))
             prefix = answer[:cb_m.start()].strip()
-            log.info(f"[ToolParse] ✓ 代码块格式 tool_call: name={name!r}, input={str(inp)[:120]}")
+            log.info(f"[ToolParse] - Success: Code block format tool_call: name={name!r}, input={str(inp)[:120]}")
             return make_tool_block(name, inp, tool_names, prefix)
         except (json.JSONDecodeError, ValueError) as e:
-            log.warning(f"[ToolParse] 代码块格式解析失败: {e}")
+            log.warning(f"[ToolParse] Code block format parse failed: {e}")
 
     try:
         stripped_tmp = re.sub(r'```(?:json)?\s*\n?', '', answer)
@@ -181,7 +181,7 @@ def parse_tool_calls(answer: str, tools: list):
                 name = obj.get("name", "")
                 args = parse_tool_input(obj.get("arguments", obj.get("input", obj.get("parameters", {}))))
                 if name in tool_names or tool_names:
-                    log.info(f"[ToolParse] ✓ Qwen原生格式: name={name!r}, args={str(args)[:120]}")
+                    log.info(f"[ToolParse] - Success: Qwen native format: name={name!r}, args={str(args)[:120]}")
                     return make_tool_block(name, args, tool_names)
     except (json.JSONDecodeError, ValueError):
         pass
@@ -193,7 +193,7 @@ def parse_tool_calls(answer: str, tools: list):
         pos, tool_call = result
         prefix = stripped[:pos].strip()
         tool_id = tool_call.get("id") or f"toolu_{uuid.uuid4().hex[:8]}"
-        log.info(f"[ToolParse] ✓ 旧JSON格式 tool_call: name={tool_call['name']!r}")
+        log.info(f"[ToolParse] - Success: Legacy JSON format tool_call: name={tool_call['name']!r}")
         blocks = []
         if prefix:
             blocks.append({"type": "text", "text": prefix})
@@ -205,7 +205,7 @@ def parse_tool_calls(answer: str, tools: list):
         })
         return blocks, "tool_use"
 
-    log.warning(f"[ToolParse] ✗ 未检测到工具调用，作为普通文本返回。工具列表: {tool_names}")
+    log.warning(f"[ToolParse] - Failed: No tool call detected, returning as plain text. Tools: {tool_names}")
     return [{"type": "text", "text": answer}], "end_turn"
 
 

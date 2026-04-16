@@ -1,0 +1,194 @@
+{
+  "nav": {
+    "dashboard": "运行状态",
+    "accounts": "账号管理",
+    "tokens": "API Key",
+    "test": "接口测试",
+    "images": "图片生成",
+    "settings": "系统设置"
+  },
+  "dashboard": {
+    "title": "运行状态",
+    "subtitle": "全局并发监控与千问账号池概览。",
+    "valid_accounts": "可用账号",
+    "active_engines": "当前并发引擎",
+    "queued_requests": "排队请求数",
+    "limited_invalid": "限流号/失效号",
+    "api_pool": "API 接口池",
+    "api_pool_desc": "兼容主流 AI 协议的调用入口，默认无需认证，或通过 API Key 访问。",
+    "health_check": "健康检查"
+  },
+  "accounts": {
+    "title": "账号管理",
+    "subtitle": "统一管理上游账号池，并区分未激活、限流、封禁与失效状态。",
+    "verify_all": "全量巡检",
+    "refresh": "刷新状态",
+    "auto_register": "一键获取新号",
+    "registering": "正在注册...",
+    "status": {
+      "valid": "可用",
+      "pending": "未激活",
+      "limited": "限流",
+      "banned": "封禁",
+      "invalid": "失效",
+      "other": "其他失效"
+    },
+    "manual": {
+      "title": "手动注入账号",
+      "desc": "如果你已经在 chat.qwen.ai 登录过，可以把 token 手动注入到账号池。",
+      "token_label": "Token（必填）",
+      "token_placeholder": "粘贴 token",
+      "email_label": "邮箱（选填）",
+      "email_placeholder": "邮箱地址",
+      "password_label": "密码（选填）",
+      "password_placeholder": "用于自动刷新或激活",
+      "button": "注入账号"
+    },
+    "list": {
+      "title": "账号列表",
+      "th_account": "账号",
+      "th_status": "状态",
+      "th_load": "并发负载",
+      "th_desc": "说明",
+      "th_action": "操作",
+      "empty": "暂无账号，请手动注入或一键获取新号。",
+      "threads": "线程",
+      "activate": "激活",
+      "verify": "单独验证",
+      "delete": "删除账号"
+    },
+    "messages": {
+      "refresh_failed": "刷新账号列表失败，请检查会话密钥",
+      "token_required": "请先填写 Token",
+      "injecting": "正在注入账号...",
+      "injected": "账号已加入账号池",
+      "inject_failed": "账号注入失败",
+      "delete_confirm": "正在删除",
+      "deleted": "已删除",
+      "delete_failed": "删除账号失败",
+      "auto_registering": "正在自动注册新账号，请稍候...",
+      "reg_pending": "账号已注册，但仍需激活：",
+      "reg_success": "注册成功：",
+      "reg_failed": "自动注册失败",
+      "verifying": "正在验证",
+      "verify_success": "验证通过：",
+      "verify_failed": "验证失败",
+      "verify_all_start": "正在并发巡检所有账号...",
+      "verify_all_done": "全量巡检完成，并发数：",
+      "activating": "正在激活",
+      "act_pending": "账号正在激活中，请稍后刷新",
+      "act_success": "激活成功",
+      "act_failed": "激活失败"
+    }
+  },
+  "tokens": {
+    "title": "API Key 分发",
+    "subtitle": "管理可以访问此网关的下游凭证。",
+    "refresh": "刷新",
+    "generate": "生成新 Key",
+    "th_index": "序号",
+    "th_key": "API Key",
+    "th_action": "操作",
+    "empty": "暂无 API Key",
+    "messages": {
+      "refresh_failed": "刷新失败，请检查会话 Key",
+      "refreshed": "已刷新",
+      "generate_success": "已生成新的 API Key",
+      "generate_failed": "生成失败，请检查权限",
+      "delete_success": "API Key 已删除",
+      "delete_failed": "删除失败"
+    }
+  },
+  "settings": {
+    "title": "系统设置",
+    "subtitle": "管理控制台认证与网关运行时配置。",
+    "refresh": "刷新配置",
+    "refreshed": "配置已刷新",
+    "session": {
+      "title": "当前会话 Key",
+      "desc": "将已有的 API Key 粘贴到此处，控制台将使用它进行所有的管理操作。（保存在浏览器本地）",
+      "placeholder": "sk-qwen-... 或默认管理员密钥 admin",
+      "save": "保存",
+      "clear": "清除",
+      "saved": "Key 已保存到本地，刷新数据...",
+      "cleared": "Key 已清除",
+      "required": "请输入 Key"
+    },
+    "connection": {
+      "title": "连接信息",
+      "base_url": "API 基础地址 (Base URL)"
+    },
+    "core": {
+      "title": "核心并发参数",
+      "desc": "运行时并发槽位与排队阈值（需要在后端 config.json 中修改后重启生效）。",
+      "version": "当前系统版本",
+      "inflight": "单账号最大并发 (max_inflight)",
+      "inflight_desc": "控制每个上游账号同时处理的请求数量，避免被封禁。",
+      "save": "保存",
+      "save_success": "并发配置已保存",
+      "save_failed": "保存失败"
+    },
+    "aliases": {
+      "title": "自动模型映射规则 (Model Aliases)",
+      "desc": "下游传入的模型名称将被网关自动路由至以下千问实际模型。请使用标准 JSON 格式编辑。",
+      "save": "保存映射",
+      "save_success": "模型映射规则已更新",
+      "json_error": "JSON 格式错误，请检查语法"
+    },
+    "example": {
+      "title": "使用示例",
+      "curl_desc": "curl 示例代码"
+    }
+  },
+  "test": {
+    "title": "接口测试",
+    "subtitle": "在此测试您的 API 分发是否正常工作。",
+    "model": "模型",
+    "stream": "流式传输 (Stream)",
+    "clear": "清空对话",
+    "empty": "发送一条消息以开始测试，系统将通过 /v1/chat/completions 进行调用。",
+    "thinking": "思考中...",
+    "placeholder": "输入测试消息...",
+    "messages": {
+      "unknown_response": "未知响应",
+      "network_error": "网络错误",
+      "empty_response": "响应为空（账号可能未激活或无可用账号）"
+    }
+  },
+  "image": {
+    "title": "图片生成",
+    "subtitle": "通过 Qwen3.6-Plus 生成 AI 图片，支持多种比例。",
+    "prompt_label": "图片描述 (Prompt)",
+    "prompt_placeholder": "描述你想生成的图片，例如：赛博朋克风格的猫咪，霓虹灯背景，超写实风格",
+    "prompt_hint": "Ctrl+Enter 快速生成",
+    "ratio_label": "图片比例",
+    "count_label": "生成数量",
+    "count_unit": "张",
+    "generate": "生成图片",
+    "generating": "生成中...",
+    "status": {
+      "generating": "正在生成图片...",
+      "generating_hint": "图片生成通常需要 10-30 秒，请耐心等待",
+      "success": "成功生成 {{count}} 张图片",
+      "failed": "生成失败",
+      "empty": "未返回图片，请重试",
+      "no_images": "还没有生成图片",
+      "no_images_hint": "在上方输入描述，点击「生成图片」开始创作"
+    },
+    "result": {
+      "title": "生成结果",
+      "clear": "清空",
+      "download": "下载",
+      "open_new": "在新窗口打开",
+      "load_failed": "图片加载失败"
+    }
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "发生错误",
+    "success": "操作成功",
+    "unauthorized": "未授权",
+    "pages": "Pages",
+    "status_failed": "状态获取失败，请在「系统设置」检查您的当前会话 Key。"
+  }
+}

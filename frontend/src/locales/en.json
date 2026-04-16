@@ -1,0 +1,224 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "accounts": "Accounts",
+    "provider": "Provider",
+    "tokens": "API Keys",
+    "test": "API Test",
+    "images": "Image Gen",
+    "settings": "Settings",
+    "security": "Security"
+  },
+  "dashboard": {
+    "title": "System Status",
+    "subtitle": "Global concurrency monitoring and Qwen account pool overview.",
+    "valid_accounts": "Available Accounts",
+    "active_engines": "Active Concurrent Engines",
+    "queued_requests": "Queued Requests",
+    "limited_invalid": "Rate-Limited / Invalid",
+    "api_pool": "API Endpoints",
+    "api_pool_desc": "Compatible with major AI protocols, no authentication needed by default, or accessible via API Key.",
+    "health_check": "Health Check"
+  },
+  "accounts": {
+    "title": "Account Management",
+    "subtitle": "Manage upstream account pool, distinguishing between pending, rate-limited, banned, and invalid states.",
+    "verify_all": "Verify All",
+    "refresh": "Refresh Status",
+    "auto_register": "Get New Account",
+    "registering": "Registering...",
+    "magic_capture": "Magic Capture",
+    "magic_capture_open": "Open Browser",
+    "magic_capture_extract": "EXTRACT DATA",
+    "capturing": "Processing...",
+    "status": {
+      "valid": "Valid",
+      "pending": "Pending",
+      "limited": "Limited",
+      "banned": "Banned",
+      "invalid": "Invalid",
+      "other": "Other/Expired"
+    },
+    "manual": {
+      "title": "Manual Account Injection",
+      "desc": "If you are already logged in to chat.qwen.ai, you can manually inject your token into the pool.",
+      "token_label": "Token (Required)",
+      "token_placeholder": "Paste token here",
+      "email_label": "Email (Optional)",
+      "email_placeholder": "Email address",
+      "password_label": "Password (Optional)",
+      "password_placeholder": "For auto-refresh or activation",
+      "button": "Inject Account"
+    },
+    "list": {
+      "title": "Account List",
+      "th_account": "Account",
+      "th_status": "Status",
+      "th_load": "Concurrency / Load",
+      "th_desc": "Notes",
+      "th_action": "Action",
+      "empty": "No accounts yet. Inject manually or click 'Get New Account'.",
+      "threads": "Threads",
+      "activate": "Activate",
+      "verify": "Verify",
+      "delete": "Delete Account"
+    },
+    "messages": {
+      "refresh_failed": "Failed to refresh accounts, check your Session Key",
+      "token_required": "Please fill in the Token first",
+      "injecting": "Injecting account...",
+      "injected": "Account added to the pool",
+      "inject_failed": "Failed to inject account",
+      "delete_confirm": "Deleting",
+      "deleted": "Deleted",
+      "delete_failed": "Failed to delete account",
+      "auto_registering": "Registering new account, please wait...",
+      "reg_pending": "Account registered but needs activation:",
+      "reg_success": "Registration successful:",
+      "reg_failed": "Auto-registration failed",
+      "verifying": "Verifying",
+      "verify_success": "Verification passed:",
+      "verify_failed": "Verification failed",
+      "verify_all_start": "Performing concurrent check on all accounts...",
+      "verify_all_done": "Full inspection completed, concurrency:",
+      "activating": "Activating",
+      "act_pending": "Activation in progress, please refresh later",
+      "act_success": "Activation successful",
+      "act_failed": "Activation failed",
+      "capture_start": "Opening browser... Please login to Qwen.ai",
+      "capture_opening": "Opening capture browser...",
+      "capture_open": "Browser ready! Login to Qwen and click EXTRACT.",
+      "capture_extracting": "Extracting session data...",
+      "capture_success": "Session captured successfully!",
+      "capture_failed": "Capture failed or browser closed",
+      "capture_stopped": "Capture cancelled."
+    }
+  },
+  "tokens": {
+    "title": "API Key Management",
+    "subtitle": "Manage downstream credentials that can access this gateway.",
+    "refresh": "Refresh",
+    "generate": "Generate New Key",
+    "th_index": "ID",
+    "th_key": "API Key",
+    "th_action": "Action",
+    "empty": "No API Keys found",
+    "messages": {
+      "refresh_failed": "Refresh failed, check session key",
+      "refreshed": "Refreshed",
+      "generate_success": "New API Key generated",
+      "generate_failed": "Generation failed, check permissions",
+      "delete_success": "API Key deleted",
+      "delete_failed": "Delete failed"
+    }
+  },
+  "settings": {
+    "title": "System Settings",
+    "subtitle": "Manage console authentication and gateway runtime configuration.",
+    "refresh": "Refresh Config",
+    "refreshed": "Configuration refreshed",
+    "session": {
+      "title": "Current Session Key",
+      "desc": "Paste your existing API Key here. The console will use it for all administrative actions (stored locally in browser).",
+      "placeholder": "sk-qwen-... or default admin key",
+      "save": "Save",
+      "clear": "Clear",
+      "saved": "Key saved locally, refreshing data...",
+      "cleared": "Key cleared",
+      "required": "Please enter a Key"
+    },
+    "connection": {
+      "title": "Connection Info",
+      "base_url": "API Base URL"
+    },
+    "core": {
+      "title": "Core Parameters",
+      "desc": "Runtime concurrency slots and queue thresholds (requires restart if modified in backend config.json).",
+      "version": "System Version",
+      "inflight": "Max In-flight Per Account",
+      "inflight_desc": "Controls the number of simultaneous requests per upstream account to avoid bans.",
+      "save": "Save",
+      "save_success": "Settings saved successfully",
+      "save_failed": "Failed to save"
+    },
+    "modes": {
+      "thinking_title": "Thinking Mode (Reasoning)",
+      "thinking_desc": "Enables deep logic and 'Chain of Thought' reasoning. The system will be smarter but with higher latency (slower).",
+      "search_title": "Internet Search (Web Search)",
+      "search_desc": "Allows the model to perform real-time web searches to provide up-to-date information."
+    },
+    "aliases": {
+      "title": "Model Aliases (Mapping)",
+      "desc": "Incoming model names will be automatically routed to these Qwen models. Edit using standard JSON format.",
+      "save": "Save Mapping",
+      "save_success": "Model mapping updated",
+      "json_error": "JSON format error, check syntax"
+    },
+    "example": {
+      "title": "Usage Examples",
+      "curl_desc": "curl examples"
+    },
+    "messages": {
+      "refresh_failed": "Failed to refresh settings, check your Session Key"
+    }
+  },
+  "test": {
+    "title": "Interface Test",
+    "subtitle": "Test your API distribution here to ensure it works correctly.",
+    "model": "Model",
+    "stream": "Stream",
+    "clear": "Clear Conversation",
+    "empty": "Send a message to start testing. The system will use the /v1/chat/completions endpoint.",
+    "thinking": "Thinking...",
+    "placeholder": "Type a test message...",
+    "messages": {
+      "unknown_response": "Unknown response",
+      "network_error": "Network error",
+      "empty_response": "Response is empty (Account might be pending or no accounts available)"
+    }
+  },
+  "image": {
+    "title": "Image Generation",
+    "subtitle": "Generate AI images using Qwen, supporting multiple aspect ratios.",
+    "prompt_label": "Image Prompt",
+    "prompt_placeholder": "Describe the image you want to generate, e.g., 'A cyberpunk cat with neon lights, ultra-realistic'",
+    "prompt_hint": "Ctrl+Enter to generate quickly",
+    "ratio_label": "Aspect Ratio",
+    "count_label": "Count",
+    "count_unit": "img",
+    "generate": "Generate Image",
+    "generating": "Generating...",
+    "status": {
+      "generating": "Generating image...",
+      "generating_hint": "This usually takes 10-30 seconds, please wait",
+      "success": "Successfully generated {{count}} image(s)",
+      "failed": "Generation failed",
+      "empty": "No images returned, please try again",
+      "no_images": "No images generated yet",
+      "no_images_hint": "Enter a prompt above and click 'Generate Image' to start"
+    },
+    "result": {
+      "title": "Generation Results",
+      "clear": "Clear",
+      "download": "Download",
+      "open_new": "Open in New Window",
+      "load_failed": "Image failed to load"
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error occurred",
+    "success": "Success",
+    "unauthorized": "Unauthorized",
+    "pages": "Pages",
+    "status_failed": "Failed to get status, please check your Session Key in \"System Settings\"."
+  },
+  "auth": {
+    "title": "Admin Access",
+    "desc": "Please enter your ADMIN_KEY to continue.",
+    "placeholder": "Enter secret key...",
+    "button": "Unlock Dashboard",
+    "invalid": "Invalid administrator key.",
+    "secure": "Secure Gateway Access"
+  }
+}

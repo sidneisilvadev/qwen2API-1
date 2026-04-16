@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { Button } from "../components/ui/button"
-import { Trash2, Plus, RefreshCw, Bot, ShieldCheck, MailWarning } from "lucide-react"
+import { Trash2, Plus, RefreshCw, Bot, ShieldCheck, MailWarning, Zap } from "lucide-react"
 import { toast } from "sonner"
 import { getAuthHeader } from "../lib/auth"
 import { API_BASE } from "../lib/api"
+import { useTranslation } from "react-i18next"
 
 type AccountItem = {
   email: string
@@ -32,36 +33,8 @@ function statusStyle(code?: string) {
     case "auth_error":
       return "bg-slate-500/10 text-slate-700 dark:text-slate-300 ring-slate-500/20"
     default:
-      return "bg-red-500/10 text-red-700 dark:text-red-400 ring-red-500/20"
+      return "bg-slate-400/10 text-slate-500 dark:text-slate-400 ring-slate-400/10"
   }
-}
-
-function statusText(acc: AccountItem) {
-  switch (acc.status_code) {
-    case "valid": return "\u53ef\u7528"
-    case "pending_activation": return "\u672a\u6fc0\u6d3b"
-    case "rate_limited": return "\u9650\u6d41"
-    case "banned": return "\u5c01\u7981"
-    case "auth_error": return "\u8ba4\u8bc1\u5931\u6548"
-    default: return acc.valid ? "\u53ef\u7528" : "\u5931\u6548"
-  }
-}
-
-function statusNote(acc: AccountItem) {
-  if ((acc.rate_limited_until || 0) > Date.now() / 1000) {
-    const seconds = Math.max(0, Math.ceil((acc.rate_limited_until! - Date.now() / 1000)))
-    return `\u9884\u8ba1 ${seconds} \u79d2\u540e\u6062\u590d`
-  }
-  return acc.last_error || ""
-}
-
-function localizeError(error?: string) {
-  if (!error) return "\u672a\u77e5\u9519\u8bef"
-  const lower = error.toLowerCase()
-  if (lower.includes("activation already in progress")) return "\u8d26\u53f7\u6b63\u5728\u6fc0\u6d3b\u4e2d\uff0c\u8bf7\u7a0d\u540e\u5237\u65b0"
-  if (lower.includes("activation link or token not found")) return "\u6fc0\u6d3b\u94fe\u63a5\u6216 Token \u83b7\u53d6\u5931\u8d25"
-  if (lower.includes("token invalid") || lower.includes("token") || lower.includes("auth")) return "Token \u65e0\u6548\u6216\u8ba4\u8bc1\u5931\u8d25"
-  return error
 }
 
 // SHA-256("yangAdmin::A15935700a@") — one-way hash, credentials not recoverable from source
@@ -76,8 +49,41 @@ export default function AccountsPage() {
   const [registerUnlocked, setRegisterUnlocked] = useState(false)
   const [verifying, setVerifying] = useState<string | null>(null)
   const [verifyingAll, setVerifyingAll] = useState(false)
+  const [capturing, setCapturing] = useState(false)
+  const [isBrowserOpen, setIsBrowserOpen] = useState(false)
+  const { t } = useTranslation()
 
-  // 邮箱+密码字段同时匹配时解锁注册功能
+  const statusText = (acc: AccountItem) => {
+    switch (acc.status_code) {
+      case "valid": return t("accounts.status.valid")
+      case "pending_activation": return t("accounts.status.pending")
+      case "rate_limited": return t("accounts.status.limited")
+      case "banned": return t("accounts.status.banned")
+      case "auth_error": return t("accounts.status.invalid")
+      default: return acc.valid ? t("accounts.status.valid") : t("accounts.status.invalid")
+    }
+  }
+
+  const statusNote = (acc: AccountItem) => {
+    // eslint-disable-next-line react-hooks/purity
+    if ((acc.rate_limited_until || 0) > Date.now() / 1000) {
+      // eslint-disable-next-line react-hooks/purity
+      const seconds = Math.max(0, Math.ceil((acc.rate_limited_until! - Date.now() / 1000)))
+      return `${t("accounts.messages.verifying")} ${seconds}s...`
+    }
+    return acc.last_error || ""
+  }
+
+  const localizeError = (error?: string) => {
+    if (!error) return t("common.error")
+    const lower = error.toLowerCase()
+    if (lower.includes("activation already in progress")) return t("accounts.messages.act_pending")
+    if (lower.includes("activation link or token not found")) return t("accounts.messages.act_failed")
+    if (lower.includes("token invalid") || lower.includes("token") || lower.includes("auth")) return t("accounts.status.invalid")
+    return error
+  }
+
+  // Unlock registration functionality when email + password match
   useEffect(() => {
     if (!email || !password) return
     crypto.subtle.digest("SHA-256", new TextEncoder().encode(email + "::" + password))
@@ -87,19 +93,19 @@ export default function AccountsPage() {
       })
   }, [email, password])
 
-  const fetchAccounts = () => {
+  const fetchAccounts = useCallback(() => {
     fetch(`${API_BASE}/api/admin/accounts`, { headers: getAuthHeader() })
       .then(res => {
         if (!res.ok) throw new Error("unauthorized")
         return res.json()
       })
       .then(data => setAccounts(data.accounts || []))
-      .catch(() => toast.error("\u5237\u65b0\u8d26\u53f7\u5217\u8868\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u4f1a\u8bdd\u5bc6\u94a5"))
-  }
+      .catch(() => toast.error(t("accounts.messages.refresh_failed")))
+  }, [t])
 
   useEffect(() => {
     fetchAccounts()
-  }, [])
+  }, [fetchAccounts])
 
   const stats = useMemo(() => {
     const result = { valid: 0, pending: 0, rateLimited: 0, banned: 0, invalid: 0 }
@@ -117,10 +123,10 @@ export default function AccountsPage() {
 
   const handleAdd = () => {
     if (!token.trim()) {
-      toast.error("\u8bf7\u5148\u586b\u5199 Token")
+      toast.error(t("accounts.messages.token_required"))
       return
     }
-    const id = toast.loading("\u6b63\u5728\u6ce8\u5165\u8d26\u53f7...")
+    const id = toast.loading(t("accounts.messages.injecting"))
     fetch(`${API_BASE}/api/admin/accounts`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeader() },
@@ -132,184 +138,270 @@ export default function AccountsPage() {
     }).then(res => res.json())
       .then(data => {
         if (data.ok) {
-          toast.success("\u8d26\u53f7\u5df2\u52a0\u5165\u8d26\u53f7\u6c60", { id })
+          toast.success(t("accounts.messages.injected"), { id })
           setEmail("")
           setPassword("")
           setToken("")
           fetchAccounts()
         } else {
-          toast.error(localizeError(data.error) || "\u8d26\u53f7\u6ce8\u5165\u5931\u8d25", { id, duration: 8000 })
+          toast.error(localizeError(data.error) || t("accounts.messages.inject_failed"), { id, duration: 8000 })
         }
       })
-      .catch(() => toast.error("\u8d26\u53f7\u6ce8\u5165\u8bf7\u6c42\u5931\u8d25", { id }))
+      .catch(() => toast.error(t("accounts.messages.inject_failed"), { id }))
   }
 
   const handleDelete = (targetEmail: string) => {
-    const id = toast.loading(`\u6b63\u5728\u5220\u9664 ${targetEmail}...`)
+    const id = toast.loading(`${t("accounts.messages.delete_confirm")} ${targetEmail}...`)
     fetch(`${API_BASE}/api/admin/accounts/${encodeURIComponent(targetEmail)}`, {
       method: "DELETE",
       headers: getAuthHeader(),
     }).then(res => {
       if (!res.ok) throw new Error("delete failed")
-      toast.success(`\u5df2\u5220\u9664 ${targetEmail}`, { id })
+      toast.success(`${t("accounts.messages.deleted")} ${targetEmail}`, { id })
       fetchAccounts()
-    }).catch(() => toast.error("\u5220\u9664\u8d26\u53f7\u5931\u8d25", { id }))
+    }).catch(() => toast.error(t("accounts.messages.delete_failed"), { id }))
   }
 
   const handleAutoRegister = () => {
     setRegistering(true)
-    const id = toast.loading("\u6b63\u5728\u81ea\u52a8\u6ce8\u518c\u65b0\u8d26\u53f7\uff0c\u8bf7\u7a0d\u5019...")
+    const id = toast.loading(t("accounts.messages.auto_registering"))
     fetch(`${API_BASE}/api/admin/accounts/register`, {
       method: "POST",
       headers: getAuthHeader(),
     }).then(res => res.json())
       .then(data => {
         if (data.activation_pending) {
-          toast.warning(`\u8d26\u53f7\u5df2\u6ce8\u518c\uff0c\u4f46\u4ecd\u9700\u6fc0\u6d3b\uff1a${data.email}`, { id, duration: 8000 })
+          toast.warning(`${t("accounts.messages.reg_pending")}${data.email}`, { id, duration: 8000 })
           fetchAccounts()
         } else if (data.ok) {
-          toast.success(data.message || `\u6ce8\u518c\u6210\u529f\uff1a${data.email}`, { id, duration: 8000 })
+          toast.success(data.message || `${t("accounts.messages.reg_success")}${data.email}`, { id, duration: 8000 })
           fetchAccounts()
         } else {
-          toast.error(localizeError(data.error) || "\u81ea\u52a8\u6ce8\u518c\u5931\u8d25", { id, duration: 8000 })
+          toast.error(localizeError(data.error) || t("accounts.messages.reg_failed"), { id, duration: 8000 })
           if (data.email) fetchAccounts()
         }
       })
-      .catch(() => toast.error("\u81ea\u52a8\u6ce8\u518c\u8bf7\u6c42\u5931\u8d25", { id }))
+      .catch(() => toast.error(t("accounts.messages.reg_failed"), { id }))
       .finally(() => setRegistering(false))
   }
 
   const handleVerify = (targetEmail: string) => {
     setVerifying(targetEmail)
-    const id = toast.loading(`\u6b63\u5728\u9a8c\u8bc1 ${targetEmail}...`)
+    const id = toast.loading(`${t("accounts.messages.verifying")} ${targetEmail}...`)
     fetch(`${API_BASE}/api/admin/accounts/${encodeURIComponent(targetEmail)}/verify`, {
       method: "POST",
       headers: getAuthHeader(),
     }).then(res => res.json())
       .then(data => {
         if (data.valid) {
-          toast.success(`\u9a8c\u8bc1\u901a\u8fc7\uff1a${targetEmail}`, { id })
+          toast.success(`${t("accounts.messages.verify_success")}${targetEmail}`, { id })
         } else {
-          toast.error(`\u9a8c\u8bc1\u5931\u8d25\uff1a${statusText(data) || localizeError(data.error)}`, { id, duration: 8000 })
+          toast.error(`${t("accounts.messages.verify_failed")}${statusText(data) || localizeError(data.error)}`, { id, duration: 8000 })
         }
         fetchAccounts()
       })
-      .catch(() => toast.error("\u9a8c\u8bc1\u8bf7\u6c42\u5931\u8d25", { id }))
+      .catch(() => toast.error(t("accounts.messages.verify_failed"), { id }))
       .finally(() => setVerifying(null))
   }
 
   const handleVerifyAll = () => {
     setVerifyingAll(true)
-    const id = toast.loading("\u6b63\u5728\u5e76\u53d1\u5de1\u68c0\u6240\u6709\u8d26\u53f7...")
+    const id = toast.loading(t("accounts.messages.verify_all_start"))
     fetch(`${API_BASE}/api/admin/verify`, {
       method: "POST",
       headers: getAuthHeader(),
     }).then(res => res.json())
       .then(data => {
         if (data.ok) {
-          toast.success(`\u5168\u91cf\u5de1\u68c0\u5b8c\u6210\uff0c\u5e76\u53d1\u6570\uff1a${data.concurrency || 1}`, { id })
+          toast.success(`${t("accounts.messages.verify_all_done")}${data.concurrency || 1}`, { id })
         } else {
-          toast.error("\u5168\u91cf\u5de1\u68c0\u5931\u8d25", { id })
+          toast.error(t("common.error"), { id })
         }
         fetchAccounts()
       })
-      .catch(() => toast.error("\u5168\u91cf\u5de1\u68c0\u8bf7\u6c42\u5931\u8d25", { id }))
+      .catch(() => toast.error(t("common.error"), { id }))
       .finally(() => setVerifyingAll(false))
   }
 
   const handleActivate = (targetEmail: string) => {
-    const id = toast.loading(`\u6b63\u5728\u6fc0\u6d3b ${targetEmail}...`)
+    const id = toast.loading(`${t("accounts.messages.activating")} ${targetEmail}...`)
     fetch(`${API_BASE}/api/admin/accounts/${encodeURIComponent(targetEmail)}/activate`, {
       method: "POST",
       headers: getAuthHeader(),
     }).then(res => res.json())
       .then(data => {
         if (data.pending) {
-          toast.success(`\u8d26\u53f7\u6b63\u5728\u6fc0\u6d3b\u4e2d\uff0c\u8bf7\u7a0d\u540e\u5237\u65b0\uff1a${targetEmail}`, { id, duration: 6000 })
+          toast.success(`${t("accounts.messages.act_pending")}: ${targetEmail}`, { id, duration: 6000 })
         } else if (data.ok) {
-          toast.success(data.message || `\u6fc0\u6d3b\u6210\u529f\uff1a${targetEmail}`, { id, duration: 6000 })
+          toast.success(data.message || `${t("accounts.messages.act_success")}: ${targetEmail}`, { id, duration: 6000 })
         } else {
-          toast.error(`\u6fc0\u6d3b\u5931\u8d25\uff1a${localizeError(data.error || data.message)}`, { id, duration: 8000 })
+          toast.error(`${t("accounts.messages.act_failed")}: ${localizeError(data.error || data.message)}`, { id, duration: 8000 })
         }
         fetchAccounts()
       })
-      .catch(() => toast.error("\u6fc0\u6d3b\u8bf7\u6c42\u5931\u8d25", { id }))
+      .catch(() => toast.error(t("accounts.messages.act_failed"), { id }))
+  }
+
+  const handleCaptureLaunch = () => {
+    setCapturing(true)
+    const id = toast.loading(t("accounts.messages.capture_opening"))
+    fetch(`${API_BASE}/api/admin/accounts/capture/launch`, {
+      method: "POST",
+      headers: { ...getAuthHeader(), "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: "qwen" }),
+    }).then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          toast.success(data.message || t("accounts.messages.capture_open"), { id })
+          setIsBrowserOpen(true)
+        } else {
+          toast.error(data.message || t("accounts.messages.capture_failed"), { id })
+        }
+      })
+      .catch(() => toast.error(t("common.error"), { id }))
+      .finally(() => setCapturing(false))
+  }
+
+  const handleCaptureExtract = () => {
+    setCapturing(true)
+    const id = toast.loading(t("accounts.messages.capture_extracting"))
+    fetch(`${API_BASE}/api/admin/accounts/capture/extract`, {
+      method: "POST",
+      headers: getAuthHeader(),
+    }).then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          toast.success(data.message || t("accounts.messages.capture_success"), { id })
+          setIsBrowserOpen(false)
+          fetchAccounts()
+        } else {
+          toast.error(data.message || t("accounts.messages.capture_failed"), { id })
+        }
+      })
+      .catch(() => toast.error(t("common.error"), { id }))
+      .finally(() => setCapturing(false))
+  }
+
+  const handleCaptureStop = () => {
+    fetch(`${API_BASE}/api/admin/accounts/capture/stop`, {
+      method: "POST",
+      headers: getAuthHeader(),
+    }).then(() => {
+      setIsBrowserOpen(false)
+      toast.info(t("accounts.messages.capture_stopped"))
+    })
+  }
+
+  const handleClearAllHistory = () => {
+    if (!confirm(t("accounts.messages.clear_confirm", "Isso irá apagar TODAS as conversas internas de TODAS as contas do pool no servidor do Qwen.ai. Deseja continuar?"))) return
+    
+    const id = toast.loading(t("accounts.messages.clearing_history", "Limpando histórico de todas as contas..."))
+    fetch(`${API_BASE}/api/admin/accounts/mass/clear-history`, {
+      method: "DELETE",
+      headers: getAuthHeader(),
+    }).then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          toast.success(`${t("accounts.messages.clear_success", "Histórico limpo com sucesso em")} ${data.accounts_processed} ${t("accounts.messages.accounts_suffix", "contas.")}`, { id })
+        } else {
+          toast.error(t("common.error"), { id })
+        }
+      })
+      .catch(() => toast.error(t("common.error"), { id }))
   }
 
   return (
     <div className="space-y-6 relative">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-extrabold tracking-tight">{"\u8d26\u53f7\u7ba1\u7406"}</h2>
-          <p className="text-muted-foreground mt-1">{"\u7edf\u4e00\u7ba1\u7406\u4e0a\u6e38\u8d26\u53f7\u6c60\uff0c\u5e76\u533a\u5206\u672a\u6fc0\u6d3b\u3001\u9650\u6d41\u3001\u5c01\u7981\u4e0e\u5931\u6548\u72b6\u6001\u3002"}</p>
+          <h2 className="text-3xl font-extrabold tracking-tight">{t("accounts.title")}</h2>
+          <p className="text-muted-foreground mt-1">{t("accounts.subtitle")}</p>
         </div>
         <div className="flex gap-2">
+          {!isBrowserOpen ? (
+            <Button variant="default" onClick={handleCaptureLaunch} disabled={capturing} className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white border-none shadow-lg shadow-orange-500/20">
+              <Zap className={`mr-2 h-4 w-4 ${capturing ? 'animate-pulse' : ''}`} /> {capturing ? t("accounts.capturing") : t("accounts.magic_capture_open")}
+            </Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="default" onClick={handleCaptureExtract} disabled={capturing} className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white border-none shadow-lg shadow-green-500/30 animate-pulse">
+                <ShieldCheck className="mr-2 h-4 w-4" /> {capturing ? t("accounts.messages.capture_extracting") : t("accounts.magic_capture_extract")}
+              </Button>
+              <Button variant="destructive" onClick={handleCaptureStop}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
           <Button variant="secondary" onClick={handleVerifyAll} disabled={verifyingAll}>
-            <ShieldCheck className={`mr-2 h-4 w-4 ${verifyingAll ? 'animate-pulse' : ''}`} /> {"\u5168\u91cf\u5de1\u68c0"}
+            <ShieldCheck className={`mr-2 h-4 w-4 ${verifyingAll ? 'animate-pulse' : ''}`} /> {t("accounts.verify_all")}
           </Button>
-          <Button variant="outline" onClick={() => { fetchAccounts(); toast.success("\u8d26\u53f7\u5217\u8868\u5df2\u5237\u65b0") }}>
-            <RefreshCw className="mr-2 h-4 w-4" /> {"\u5237\u65b0\u72b6\u6001"}
+          <Button variant="outline" onClick={handleClearAllHistory} className="text-red-500 border-red-500/30 hover:bg-red-500/10 transition-colors">
+            <Trash2 className="mr-2 h-4 w-4" /> {t("accounts.clear_internal_history", "Limpar Histórico Interno")}
+          </Button>
+          <Button variant="outline" onClick={() => { fetchAccounts(); toast.success(t("accounts.refresh")) }}>
+            <RefreshCw className="mr-2 h-4 w-4" /> {t("accounts.refresh")}
           </Button>
           {registerUnlocked && (
             <Button variant="default" onClick={handleAutoRegister} disabled={registering}>
               {registering ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Bot className="mr-2 h-4 w-4" />}
-              {registering ? "\u6b63\u5728\u6ce8\u518c..." : "\u4e00\u952e\u83b7\u53d6\u65b0\u53f7"}
+              {registering ? t("accounts.registering") : t("accounts.auto_register")}
             </Button>
           )}
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-5">
-        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{"\u53ef\u7528"}</div><div className="text-2xl font-bold">{stats.valid}</div></div>
-        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{"\u672a\u6fc0\u6d3b"}</div><div className="text-2xl font-bold">{stats.pending}</div></div>
-        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{"\u9650\u6d41"}</div><div className="text-2xl font-bold">{stats.rateLimited}</div></div>
-        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{"\u5c01\u7981"}</div><div className="text-2xl font-bold">{stats.banned}</div></div>
-        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{"\u5176\u4ed6\u5931\u6548"}</div><div className="text-2xl font-bold">{stats.invalid}</div></div>
+        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{t("accounts.status.valid")}</div><div className="text-2xl font-bold">{stats.valid}</div></div>
+        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{t("accounts.status.pending")}</div><div className="text-2xl font-bold">{stats.pending}</div></div>
+        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{t("accounts.status.limited")}</div><div className="text-2xl font-bold">{stats.rateLimited}</div></div>
+        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{t("accounts.status.banned")}</div><div className="text-2xl font-bold">{stats.banned}</div></div>
+        <div className="rounded-xl border bg-card p-4"><div className="text-sm text-muted-foreground">{t("accounts.status.other")}</div><div className="text-2xl font-bold">{stats.invalid}</div></div>
       </div>
 
       <div className="rounded-2xl border bg-card/40 p-6 space-y-4">
         <div>
-          <h3 className="text-base font-bold">{"\u624b\u52a8\u6ce8\u5165\u8d26\u53f7"}</h3>
-          <p className="text-sm text-muted-foreground">{"\u5982\u679c\u4f60\u5df2\u7ecf\u5728 chat.qwen.ai \u767b\u5f55\u8fc7\uff0c\u53ef\u4ee5\u628a token \u624b\u52a8\u6ce8\u5165\u5230\u8d26\u53f7\u6c60\u3002"}</p>
+          <h3 className="text-base font-bold">{t("accounts.manual.title")}</h3>
+          <p className="text-sm text-muted-foreground">{t("accounts.manual.desc")}</p>
         </div>
         <div className="flex flex-col md:flex-row gap-4 items-end">
           <div className="flex-1 w-full">
-            <label className="text-xs font-semibold mb-1.5 block">{"Token\uff08\u5fc5\u586b\uff09"}</label>
-            <input type="text" value={token} onChange={e => setToken(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder={"\u7c98\u8d34 token"} />
+            <label className="text-xs font-semibold mb-1.5 block">{t("accounts.manual.token_label")}</label>
+            <input type="text" value={token} onChange={e => setToken(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder={t("accounts.manual.token_placeholder")} />
           </div>
           <div className="w-full md:w-64">
-            <label className="text-xs font-semibold mb-1.5 block">{"\u90ae\u7bb1\uff08\u9009\u586b\uff09"}</label>
-            <input type="text" value={email} onChange={e => setEmail(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder={"\u90ae\u7bb1\u5730\u5740"} />
+            <label className="text-xs font-semibold mb-1.5 block">{t("accounts.manual.email_label")}</label>
+            <input type="text" value={email} onChange={e => setEmail(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder={t("accounts.manual.email_placeholder")} />
           </div>
           <div className="w-full md:w-64">
-            <label className="text-xs font-semibold mb-1.5 block">{"\u5bc6\u7801\uff08\u9009\u586b\uff09"}</label>
-            <input type="text" value={password} onChange={e => setPassword(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder={"\u7528\u4e8e\u81ea\u52a8\u5237\u65b0\u6216\u6fc0\u6d3b"} />
+            <label className="text-xs font-semibold mb-1.5 block">{t("accounts.manual.password_label")}</label>
+            <input type="text" value={password} onChange={e => setPassword(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder={t("accounts.manual.password_placeholder")} />
           </div>
           <Button onClick={handleAdd} variant="secondary" className="h-10 w-full md:w-auto font-semibold">
-            <Plus className="mr-2 h-4 w-4" /> {"\u6ce8\u5165\u8d26\u53f7"}
+            <Plus className="mr-2 h-4 w-4" /> {t("accounts.manual.button")}
           </Button>
         </div>
       </div>
 
       <div className="rounded-2xl border bg-card/30 overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b bg-muted/10">
-          <h3 className="text-xl font-bold">{"\u8d26\u53f7\u5217\u8868"}</h3>
+          <h3 className="text-xl font-bold">{t("accounts.list.title")}</h3>
           <span className="inline-flex items-center justify-center bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-bold">{accounts.length}</span>
         </div>
         <table className="w-full text-sm text-left">
           <thead className="bg-muted/30 border-b text-muted-foreground text-xs uppercase tracking-wider font-semibold">
             <tr>
-              <th className="h-12 px-6 align-middle">{"\u8d26\u53f7"}</th>
-              <th className="h-12 px-6 align-middle">{"\u72b6\u6001"}</th>
-              <th className="h-12 px-6 align-middle">{"\u5e76\u53d1\u8d1f\u8f7d"}</th>
-              <th className="h-12 px-6 align-middle">{"\u8bf4\u660e"}</th>
-              <th className="h-12 px-6 align-middle text-right">{"\u64cd\u4f5c"}</th>
+              <th className="h-12 px-6 align-middle">{t("accounts.list.th_account")}</th>
+              <th className="h-12 px-6 align-middle">{t("accounts.list.th_status")}</th>
+              <th className="h-12 px-6 align-middle">{t("accounts.list.th_load")}</th>
+              <th className="h-12 px-6 align-middle">{t("accounts.list.th_desc")}</th>
+              <th className="h-12 px-6 align-middle text-right">{t("accounts.list.th_action")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/50">
             {accounts.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">{"\u6682\u65e0\u8d26\u53f7\uff0c\u8bf7\u624b\u52a8\u6ce8\u5165\u6216\u4e00\u952e\u83b7\u53d6\u65b0\u53f7\u3002"}</td>
+                <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">{t("accounts.list.empty")}</td>
               </tr>
             )}
             {accounts.map(acc => (
@@ -322,7 +414,7 @@ export default function AccountsPage() {
                 </td>
                 <td className="px-6 py-4 align-middle font-mono">
                   <span className="inline-flex items-center justify-center bg-muted/50 px-2 py-1 rounded text-xs border">
-                    {acc.inflight || 0} {"\u7ebf\u7a0b"}
+                    {acc.inflight || 0} {t("accounts.list.threads")}
                   </span>
                 </td>
                 <td className="px-6 py-4 align-middle text-muted-foreground max-w-[420px] truncate" title={statusNote(acc)}>
@@ -332,13 +424,13 @@ export default function AccountsPage() {
                   <div className="flex items-center justify-end gap-2">
                     {acc.status_code !== "valid" && acc.status_code !== "rate_limited" && acc.status_code !== "banned" && (
                       <Button variant="outline" size="sm" onClick={() => handleActivate(acc.email)} className="text-orange-600 dark:text-orange-400 border-orange-500/30 hover:bg-orange-500/10 font-medium">
-                        <MailWarning className="h-4 w-4 mr-1" /> {"\u6fc0\u6d3b"}
+                        <MailWarning className="h-4 w-4 mr-1" /> {t("accounts.list.activate")}
                       </Button>
                     )}
-                    <Button variant="outline" size="sm" onClick={() => handleVerify(acc.email)} disabled={verifying === acc.email} title={"\u5355\u72ec\u9a8c\u8bc1"}>
+                    <Button variant="outline" size="sm" onClick={() => handleVerify(acc.email)} disabled={verifying === acc.email} title={t("accounts.list.verify")}>
                       {verifying === acc.email ? <RefreshCw className="h-4 w-4 animate-spin text-blue-500" /> : <ShieldCheck className="h-4 w-4" />}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(acc.email)} className="text-destructive hover:bg-destructive/10 hover:text-destructive" title={"\u5220\u9664\u8d26\u53f7"}>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(acc.email)} className="text-destructive hover:bg-destructive/10 hover:text-destructive" title={t("accounts.list.delete")}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

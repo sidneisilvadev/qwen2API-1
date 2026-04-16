@@ -1,42 +1,62 @@
-# Node
-node_modules/
+# --- Node.js (Frontend) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.eslintcache
+frontend/*.log
+frontend/package-lock.json
+
+# --- Python (Backend) ---
+backend/__pycache__/
+backend/*.py[cod]
+backend/.venv/
+venv/
+.venv/
+build/
 dist/
-dist-ssr/
-*.local
+*.egg-info/
 
-
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Data and Logs
+# --- Databases & Data ---
+*.sqlite
+*.sqlite-journal
+*.sqlite3
+*.db
+*.db-journal
+*.sql
+*.sql.gz
+*.dump
 data/*.json
-logs/
-legacy/
-*legacy*.py
+!data/.gitkeep
+gateway.db
+captures.json
 
-# Tests and scripts
-test_*.py
-add_account.py
-fix_*.py
-
-# Env
+# --- Environment Files ---
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+frontend/.env
+backend/.env
+*.env
 
-# IDE
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDEs ---
 .vscode/
 .idea/
-.claude/
-.gitignore
-*.suo
-*.ntvs
-*.njsproj
-*.sln
-*.sw?
+.cursor/
+*.swp
+*.swo
+
+# --- Logs ---
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# --- Temporary ---
+tmp/
+temp/
+scratch/
+browser_data/
+camoufox/

@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 log = logging.getLogger("qwen2api.db")
 
 class AsyncJsonDB:
-    """带异步读写锁的 JSON 文件存储，防止并发损坏。"""
+    """JSON file storage with asynchronous read/write lock to prevent concurrent corruption."""
     def __init__(self, path: str | Path, default_data: Any = None):
         self.path = Path(path)
         self.default_data = default_data if default_data is not None else []
@@ -26,7 +26,7 @@ class AsyncJsonDB:
                 self._data = self.default_data
                 return self._data
             try:
-                # 为了不阻塞事件循环，本应用可使用 asyncio.to_thread 或者直接读，因为文件很小
+                # Small file read doesn't block event loop significantly
                 content = self.path.read_text(encoding="utf-8")
                 self._data = json.loads(content)
             except Exception as e:

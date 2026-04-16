@@ -128,16 +128,15 @@ flowchart LR
 
 ## 模型映射
 
-当前默认将主流客户端模型名称统一映射至 `qwen3.6-plus`。
+当前默认将主流客户端模型名称统一映射至 `qwen-max` 或 `qwen-plus`。
 
 | 传入模型名 | 实际调用 |
 |---|---|
-| `gpt-4o` / `gpt-4-turbo` / `gpt-4.1` / `o1` / `o3` | `qwen3.6-plus` |
-| `gpt-4o-mini` / `gpt-3.5-turbo` | `qwen3.6-plus` |
-| `claude-opus-4-6` / `claude-sonnet-4-6` / `claude-3-5-sonnet` | `qwen3.6-plus` |
-| `claude-3-haiku` / `claude-haiku-4-5` | `qwen3.6-plus` |
-| `gemini-2.5-pro` / `gemini-2.5-flash` / `gemini-1.5-pro` | `qwen3.6-plus` |
-| `deepseek-chat` / `deepseek-reasoner` | `qwen3.6-plus` |
+| `gpt-4o` / `gpt-4-turbo` / `gpt-4.1` / `o1` / `o3` | `qwen-max` |
+| `gpt-4o-mini` / `gpt-3.5-turbo` | `qwen-plus` |
+| `claude-opus-4-6` / `claude-sonnet-4-6` / `claude-3-5-sonnet` | `qwen-max` |
+| `claude-3-haiku` / `claude-haiku-4-5` | `qwen-plus` |
+| `gemini-2.5-pro` / `gemini-2.5-flash` / `gemini-1.5-pro` | `qwen-max` |
 
 未命中映射表时，默认回退为传入模型名本身；若管理台设置了自定义映射规则，则以配置为准。
 
@@ -145,11 +144,11 @@ flowchart LR
 
 ## 图片生成
 
-qwen2API 提供与 OpenAI Images 接口兼容的图片生成能力。
+qwen2API 提供与 OpenAI Images 接口兼容 de 图片生成能力。
 
 - 接口：`POST /v1/images/generations`
 - 默认模型别名：`dall-e-3`
-- 实际底层：`qwen3.6-plus` + 千问网页 `image_gen` 工具
+- 实际底层：`qwen-max` + 千问网页 `image_gen` 工具
 - 返回图片链接域名：通常为 `cdn.qwenlm.ai`
 
 ### 请求示例

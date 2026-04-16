@@ -1,0 +1,223 @@
+{
+  "nav": {
+    "dashboard": "Painel",
+    "accounts": "Gerenciar Contas",
+    "provider": "Provedor",
+    "tokens": "Chaves de API",
+    "test": "Teste de API",
+    "images": "Gerar Imagens",
+    "settings": "Configurações",
+    "security": "Segurança"
+  },
+  "dashboard": {
+    "title": "Status do Sistema",
+    "subtitle": "Monitoramento global de concorrência e visão geral das contas Qwen.",
+    "valid_accounts": "Contas Disponíveis",
+    "active_engines": "Motores Ativos",
+    "queued_requests": "Pedidos na Fila",
+    "limited_invalid": "Bloqueadas / Inválidas",
+    "api_pool": "Endpoints de API",
+    "api_pool_desc": "Compatível com os principais protocolos de IA, acesso sem autenticação por padrão ou via API Key.",
+    "health_check": "Check de Saúde"
+  },
+  "accounts": {
+    "title": "Gerenciar Contas",
+    "subtitle": "Gerencie o pool de contas Qwen, distinguindo entre pendentes, limitadas, banidas e inválidas.",
+    "verify_all": "Verificar Tudo",
+    "refresh": "Atualizar Status",
+    "auto_register": "Conta Nova",
+    "registering": "Registrando...",
+    "magic_capture": "Captura Mágica",
+    "magic_capture_open": "Abrir Navegador",
+    "magic_capture_extract": "EXTRAIR DADOS",
+    "capturing": "Processando...",
+    "status": {
+      "valid": "Disponível",
+      "pending": "Pendente",
+      "limited": "Limitada",
+      "banned": "Banida",
+      "invalid": "Inválida",
+      "other": "Outra/Expirada"
+    },
+    "manual": {
+      "title": "Inserir Conta Manualmente",
+      "desc": "Se você já fez login no qwen.ai, pode inserir o token manualmente no pool.",
+      "token_label": "Token (Obrigatório)",
+      "token_placeholder": "Cole o token aqui",
+      "email_label": "E-mail (Opcional)",
+      "email_placeholder": "Endereço de e-mail",
+      "password_label": "Senha (Opcional)",
+      "password_placeholder": "Para auto-refresh ou ativação",
+      "button": "Inserir Conta"
+    },
+    "list": {
+      "title": "Lista de Contas",
+      "th_account": "Conta",
+      "th_status": "Status",
+      "th_load": "Concorrência / Carga",
+      "th_desc": "Notas",
+      "th_action": "Ação",
+      "empty": "Nenhuma conta ainda. Insira manualmente ou clique em 'Conta Nova'.",
+      "threads": "Threads",
+      "activate": "Ativar",
+      "verify": "Verificar",
+      "delete": "Excluir Conta"
+    },
+    "messages": {
+      "refresh_failed": "Falha ao carregar contas, verifique sua Chave de Sessão",
+      "token_required": "Por favor, preencha o Token primeiro",
+      "injecting": "Inserindo conta...",
+      "injected": "Conta adicionada ao pool",
+      "inject_failed": "Falha ao inserir conta",
+      "delete_confirm": "Excluindo",
+      "deleted": "Excluído",
+      "delete_failed": "Falha ao excluir conta",
+      "auto_registering": "Registrando nova conta, aguarde...",
+      "reg_pending": "Conta registrada, mas requer ativação:",
+      "reg_success": "Registro concluído com sucesso:",
+      "reg_failed": "Falha no auto-registro",
+      "verifying": "Verificando",
+      "verify_success": "Verificação concluída com sucesso:",
+      "verify_failed": "Falha na verificação",
+      "verify_all_start": "Iniciando verificação de todas as contas...",
+      "verify_all_done": "Inspeção completa, concorrência:",
+      "activating": "Ativando",
+      "act_pending": "Ativação em andamento, atualize em breve",
+      "act_success": "Ativação concluída com sucesso",
+      "act_failed": "Falha na ativação",
+      "capture_start": "Abrindo navegador... Por favor, faça login no Qwen.ai",
+      "capture_opening": "Abrindo navegador de captura...",
+      "capture_open": "Navegador pronto! Faça login no Qwen e clique em EXTRAIR.",
+      "capture_extracting": "Extraindo dados da sessão...",
+      "capture_success": "Sessão capturada com sucesso!",
+      "capture_failed": "Falha na captura ou navegador fechado",
+      "capture_stopped": "Captura cancelada."
+    }
+  },
+  "tokens": {
+    "title": "Gerenciamento de Chaves",
+    "subtitle": "Gerencie as credenciais de acesso para este gateway.",
+    "refresh": "Atualizar",
+    "generate": "Gerar Nova Chave",
+    "th_index": "ID",
+    "th_key": "Chave de API",
+    "th_action": "Ação",
+    "empty": "Nenhuma Chave de API encontrada",
+    "messages": {
+      "refresh_failed": "Atualização falhou, verifique a chave de sessão",
+      "refreshed": "Atualizado",
+      "generate_success": "Nova Chave de API gerada",
+      "generate_failed": "Falha ao gerar, verifique permissões",
+      "delete_success": "Chave de API excluída",
+      "delete_failed": "Falha ao excluir"
+    }
+  },
+  "settings": {
+    "title": "Configurações do Sistema",
+    "subtitle": "Gerencie a autenticação do console e a configuração do gateway.",
+    "refresh": "Atualizar Config",
+    "refreshed": "Configurações atualizadas",
+    "session": {
+      "title": "Chave de Sessão Atual",
+      "desc": "Cole sua Chave de API existente aqui. O console a usará para todas as ações administrativas (armazenado localmente).",
+      "placeholder": "sk-qwen-... ou chave admin padrão",
+      "save": "Salvar",
+      "clear": "Limpar",
+      "saved": "Chave salva localmente, atualizando dados...",
+      "cleared": "Chave removida",
+      "required": "Por favor, insira uma Chave"
+    },
+    "connection": {
+      "title": "Informações de Conexão",
+      "base_url": "URL Base da API"
+    },
+    "core": {
+      "title": "Parâmetros Principais",
+      "desc": "Slots de concorrência e limites de fila (requer reinicialização se modificado no config.json do backend).",
+      "version": "Versão do Sistema",
+      "inflight": "Máx Concorrência por Conta",
+      "inflight_desc": "Controla o número de solicitações simultâneas por conta para evitar banimentos.",
+      "save": "Salvar",
+      "save_success": "Configurações salvas com sucesso",
+      "save_failed": "Falha ao salvar"
+    },
+    "modes": {
+      "thinking_title": "Modo de Raciocínio (Thinking)",
+      "thinking_desc": "Habilita a lógica profunda e o raciocínio em 'cadeia de pensamento'. O sistema responderá de forma mais inteligente, mas com maior latência (mais lento).",
+      "search_title": "Pesquisa na Internet (Web Search)",
+      "search_desc": "Permite que o modelo realize buscas em tempo real na internet para fornecer informações atualizadas."
+    },
+    "aliases": {
+      "title": "Aliases de Modelo (Mapeamento)",
+      "desc": "Nomes de modelos recebidos serão roteados automaticamente para estes modelos Qwen. Edite usando JSON padrão.",
+      "save": "Salvar Mapeamento",
+      "save_success": "Mapeamento de modelos atualizado",
+      "json_error": "Erro no formato JSON, verifique a sintaxe"
+    },
+    "example": {
+      "title": "Exemplos de Uso",
+      "curl_desc": "Exemplos de curl"
+    },
+    "messages": {
+      "refresh_failed": "Falha ao atualizar configurações, verifique sua Chave de Sessão"
+    }
+  },
+  "test": {
+    "title": "Teste de Interface",
+    "subtitle": "Teste se a distribuição da sua API está funcionando corretamente.",
+    "model": "Modelo",
+    "stream": "Stream",
+    "clear": "Limpar Conversa",
+    "empty": "Envie uma mensagem para começar o teste. O sistema usará o endpoint /v1/chat/completions.",
+    "thinking": "Pensando...",
+    "placeholder": "Digite uma mensagem de teste...",
+    "messages": {
+      "unknown_response": "Resposta desconhecida",
+      "network_error": "Erro de rede",
+      "empty_response": "A resposta está vazia (a conta pode estar pendente ou sem contas disponíveis)"
+    }
+  },
+  "image": {
+    "title": "Gerar Imagems",
+    "subtitle": "Crie imagens com IA usando o Qwen, suportando múltiplos formatos.",
+    "prompt_placeholder": "Descreva a imagem que deseja criar, ex: 'Um gato cyberpunk com luzes neon, ultra-realista'",
+    "prompt_hint": "Ctrl+Enter para gerar rapidamente",
+    "ratio_label": "Proporção",
+    "count_label": "Quantidade",
+    "count_unit": "img",
+    "generate": "Gerar Imagem",
+    "generating": "Gerando...",
+    "status": {
+      "generating": "Gerando imagem...",
+      "generating_hint": "Isso geralmente leva de 10 a 30 segundos, por favor aguarde",
+      "success": "Sucesso ao gerar {{count}} imagem(ns)",
+      "failed": "Falha ao gerar",
+      "empty": "Nenhuma imagem retornada, tente novamente",
+      "no_images": "Nenhuma imagem gerada ainda",
+      "no_images_hint": "Digite uma descrição acima e clique em 'Gerar Imagem' para começar"
+    },
+    "result": {
+      "title": "Resultados da Geração",
+      "clear": "Limpar",
+      "download": "Baixar",
+      "open_new": "Abrir em Nova Janela",
+      "load_failed": "Falha ao carregar imagem"
+    }
+  },
+  "common": {
+    "loading": "Carregando...",
+    "error": "Ocorreu um erro",
+    "success": "Sucesso",
+    "unauthorized": "Não autorizado",
+    "pages": "Páginas",
+    "status_failed": "Falha ao obter status, verifique sua chave de sessão em \"Configurações do Sistema\"."
+  },
+  "auth": {
+    "title": "Acesso Administrativo",
+    "desc": "Por favor, insira sua ADMIN_KEY para continuar.",
+    "placeholder": "Chave secreta...",
+    "button": "Desbloquear Painel",
+    "invalid": "Chave administrativa inválida.",
+    "secure": "Acesso Seguro ao Gateway"
+  }
+}

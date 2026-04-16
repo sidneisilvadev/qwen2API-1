@@ -1,21 +1,33 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Settings2, RefreshCw, KeyRound, ServerCrash, Code } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { toast } from "sonner"
 import { getAuthHeader } from "../lib/auth"
 import { API_BASE } from "../lib/api"
+import { useTranslation } from "react-i18next"
+import CodeExamples from "../components/CodeExamples"
+
+interface SettingsData {
+  version?: string;
+  max_inflight_per_account?: number;
+  default_thinking?: boolean;
+  default_search?: boolean;
+  model_aliases?: Record<string, string>;
+}
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<any>(null)
-  const [sessionKey, setSessionKey] = useState("")
-  const [maxInflight, setMaxInflight] = useState(4)
+  const [settings, setSettings] = useState<SettingsData | null>(null)
+  const [sessionKey, setSessionKey] = useState(() => localStorage.getItem('qwen2api_key') || "")
+  const [maxInflight, setMaxInflight] = useState(3)
   const [modelAliases, setModelAliases] = useState("")
-  
-  const loadSessionKey = () => {
-    setSessionKey(localStorage.getItem('qwen2api_key') || "")
-  }
+  const [defaultThinking, setDefaultThinking] = useState(false)
+  const [defaultSearch, setDefaultSearch] = useState(false)
+  const { t } = useTranslation()
 
-  const fetchSettings = () => {
+  const [models, setModels] = useState<string[]>([])
+
+  const fetchSettings = useCallback(() => {
+    // Fetch settings
     fetch(`${API_BASE}/api/admin/settings`, { headers: getAuthHeader() })
       .then(res => {
         if(!res.ok) throw new Error("Unauthorized")
@@ -23,31 +35,42 @@ export default function SettingsPage() {
       })
       .then(data => {
         setSettings(data)
-        setMaxInflight(data.max_inflight_per_account || 4)
+        setMaxInflight(data.max_inflight_per_account || 3)
+        setDefaultThinking(data.default_thinking || false)
+        setDefaultSearch(data.default_search || false)
         setModelAliases(JSON.stringify(data.model_aliases || {}, null, 2))
       })
-      .catch(() => toast.error("配置获取失败，请检查会话 Key"))
-  }
+      .catch(() => toast.error(t("settings.messages.refresh_failed")))
+
+    // Fetch models for examples
+    fetch(`${API_BASE}/v1/models`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.data) {
+          setModels(data.data.map((m: any) => m.id))
+        }
+      })
+      .catch(() => {})
+  }, [t])
 
   useEffect(() => {
-    loadSessionKey()
     fetchSettings()
-  }, [])
+  }, [fetchSettings])
 
   const handleSaveSessionKey = () => {
     if (!sessionKey.trim()) {
-      toast.error("请输入 Key")
+      toast.error(t("settings.session.required"))
       return
     }
     localStorage.setItem('qwen2api_key', sessionKey.trim())
-    toast.success("Key 已保存到本地，刷新数据...")
+    toast.success(t("settings.session.saved"))
     fetchSettings()
   }
 
   const handleClearSessionKey = () => {
     localStorage.removeItem('qwen2api_key')
     setSessionKey("")
-    toast.success("Key 已清除")
+    toast.success(t("settings.session.cleared"))
   }
 
   const handleSaveConcurrency = () => {
@@ -56,8 +79,22 @@ export default function SettingsPage() {
       headers: { "Content-Type": "application/json", ...getAuthHeader() },
       body: JSON.stringify({ max_inflight_per_account: Number(maxInflight) })
     }).then(res => {
-      if(res.ok) { toast.success("并发配置已保存"); fetchSettings(); }
-      else toast.error("保存失败")
+      if(res.ok) { toast.success(t("settings.core.save_success")); fetchSettings(); }
+      else toast.error(t("settings.core.save_failed"))
+    })
+  }
+
+  const handleToggleMode = (key: string, value: boolean) => {
+    fetch(`${API_BASE}/api/admin/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...getAuthHeader() },
+      body: JSON.stringify({ [key]: value })
+    }).then(res => {
+      if(res.ok) { 
+        toast.success(t("settings.core.save_success")); 
+        fetchSettings(); 
+      }
+      else toast.error(t("settings.core.save_failed"))
     })
   }
 
@@ -69,86 +106,27 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json", ...getAuthHeader() },
         body: JSON.stringify({ model_aliases: parsed })
       }).then(res => {
-        if(res.ok) { toast.success("模型映射规则已更新"); fetchSettings(); }
-        else toast.error("保存失败")
+        if(res.ok) { toast.success(t("settings.aliases.save_success")); fetchSettings(); }
+        else toast.error(t("settings.core.save_failed"))
       })
-    } catch(e) {
-      toast.error("JSON 格式错误，请检查语法")
+    } catch {
+      toast.error(t("settings.aliases.json_error"))
     }
   }
 
   const baseUrl = API_BASE || `http://${window.location.hostname}:7860`
 
-  const curlExample = `# OpenAI 流式对话
-curl ${baseUrl}/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -d '{
-    "model": "qwen3.6-plus",
-    "messages": [{"role": "user", "content": "你好"}],
-    "stream": true
-  }'
 
-# Anthropic 格式（Claude Code / SDK）
-curl ${baseUrl}/anthropic/v1/messages \\
-  -H "Content-Type: application/json" \\
-  -H "x-api-key: YOUR_API_KEY" \\
-  -H "anthropic-version: 2023-06-01" \\
-  -d '{
-    "model": "claude-sonnet-4-6",
-    "max_tokens": 1024,
-    "messages": [{"role": "user", "content": "你好"}]
-  }'
-
-# Gemini 格式
-curl ${baseUrl}/v1beta/models/qwen3.6-plus:generateContent \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -d '{
-    "contents": [{"parts": [{"text": "你好"}]}]
-  }'
-
-# 图片生成（标准 OpenAI Images 接口，推荐）
-curl ${baseUrl}/v1/images/generations \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -d '{
-    "model": "dall-e-3",
-    "prompt": "一只赛博朋克风格的猫，霓虹灯背景，超写实",
-    "n": 1,
-    "size": "1024x1024",
-    "response_format": "url"
-  }'
-
-# 图片生成（Chat 意图识别自动路由，返回内容中附带图片链接）
-curl ${baseUrl}/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -d '{
-    "model": "qwen3.6-plus",
-    "stream": false,
-    "messages": [{"role": "user", "content": "帮我生成一张星空下的雪山图片，写实风格"}]
-  }'
-
-# 视频生成（仍为预留链路，先不要作为稳定能力依赖）
-curl ${baseUrl}/v1/chat/completions \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -d '{
-    "model": "qwen3.6-plus",
-    "stream": false,
-    "messages": [{"role": "user", "content": "生成视频：海浪拍打礁石，慢动作"}]
-  }'`
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">系统设置</h2>
-          <p className="text-muted-foreground">管理控制台认证与网关运行时配置。</p>
+          <h2 className="text-2xl font-bold tracking-tight">{t("settings.title")}</h2>
+          <p className="text-muted-foreground">{t("settings.subtitle")}</p>
         </div>
-        <Button variant="outline" onClick={() => {fetchSettings(); toast.success("配置已刷新")}}>
-          <RefreshCw className="mr-2 h-4 w-4" /> 刷新配置
+        <Button variant="outline" onClick={() => {fetchSettings(); toast.success(t("settings.refreshed"))}}>
+          <RefreshCw className="mr-2 h-4 w-4" /> {t("settings.refresh")}
         </Button>
       </div>
 
@@ -158,9 +136,9 @@ curl ${baseUrl}/v1/chat/completions \\
           <div className="flex flex-col space-y-1.5 p-6 border-b bg-muted/30">
             <div className="flex items-center gap-2">
               <KeyRound className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold leading-none tracking-tight">当前会话 Key</h3>
+              <h3 className="font-semibold leading-none tracking-tight">{t("settings.session.title")}</h3>
             </div>
-            <p className="text-sm text-muted-foreground">将已有的 API Key 粘贴到此处，控制台将使用它进行所有的管理操作。（保存在浏览器本地）</p>
+            <p className="text-sm text-muted-foreground">{t("settings.session.desc")}</p>
           </div>
           <div className="p-6">
             <div className="flex gap-2 items-center">
@@ -168,11 +146,11 @@ curl ${baseUrl}/v1/chat/completions \\
                 type="password" 
                 value={sessionKey}
                 onChange={e => setSessionKey(e.target.value)}
-                placeholder="sk-qwen-... 或默认管理员密钥 admin" 
+                placeholder={t("settings.session.placeholder")} 
                 className="flex h-10 w-full flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
-              <Button onClick={handleSaveSessionKey}>保存</Button>
-              <Button variant="ghost" onClick={handleClearSessionKey}>清除</Button>
+              <Button onClick={handleSaveSessionKey}>{t("settings.session.save")}</Button>
+              <Button variant="ghost" onClick={handleClearSessionKey}>{t("settings.session.clear")}</Button>
             </div>
           </div>
         </div>
@@ -182,12 +160,12 @@ curl ${baseUrl}/v1/chat/completions \\
           <div className="flex flex-col space-y-1.5 p-6 border-b bg-muted/30">
             <div className="flex items-center gap-2">
               <ServerCrash className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold leading-none tracking-tight">连接信息</h3>
+              <h3 className="font-semibold leading-none tracking-tight">{t("settings.connection.title")}</h3>
             </div>
           </div>
           <div className="p-6">
             <div className="space-y-1">
-              <label className="text-sm font-medium">API 基础地址 (Base URL)</label>
+              <label className="text-sm font-medium">{t("settings.connection.base_url")}</label>
               <input type="text" readOnly value={baseUrl} className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono text-muted-foreground" />
             </div>
           </div>
@@ -198,32 +176,58 @@ curl ${baseUrl}/v1/chat/completions \\
           <div className="flex flex-col space-y-1.5 p-6 border-b bg-muted/30">
             <div className="flex items-center gap-2">
               <Settings2 className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold leading-none tracking-tight">核心并发参数</h3>
+              <h3 className="font-semibold leading-none tracking-tight">{t("settings.core.title")}</h3>
             </div>
-            <p className="text-sm text-muted-foreground">运行时并发槽位与排队阈值（需要在后端 config.json 中修改后重启生效）。</p>
+            <p className="text-sm text-muted-foreground">{t("settings.core.desc")}</p>
           </div>
           <div className="p-6 space-y-4">
             <div className="flex justify-between items-center py-2 border-b">
               <div className="space-y-1">
-                <span className="text-sm font-medium">当前系统版本</span>
+                <span className="text-sm font-medium">{t("settings.core.version")}</span>
               </div>
               <span className="font-mono text-sm">{settings?.version || "..."}</span>
             </div>
             <div className="flex justify-between items-center py-2 border-b">
               <div className="space-y-1">
-                <span className="text-sm font-medium">单账号最大并发 (max_inflight)</span>
-                <p className="text-xs text-muted-foreground">控制每个上游账号同时处理的请求数量，避免被封禁。</p>
+                <span className="text-sm font-medium">{t("settings.core.inflight")}</span>
+                <p className="text-xs text-muted-foreground">{t("settings.core.inflight_desc")}</p>
               </div>
               <div className="flex gap-2 items-center">
                 <input 
                   type="number" 
                   min="1" 
-                  max="10" 
+                  max="20" 
                   value={maxInflight} 
                   onChange={e => setMaxInflight(Number(e.target.value))}
                   className="flex h-8 w-20 rounded-md border border-input bg-background px-3 py-1 text-sm text-center"
                 />
-                <Button size="sm" onClick={handleSaveConcurrency}>保存</Button>
+                <Button size="sm" onClick={handleSaveConcurrency}>{t("settings.core.save")}</Button>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center py-4 border-b">
+              <div className="space-y-1">
+                <span className="text-sm font-medium">{t("settings.modes.thinking_title")}</span>
+                <p className="text-xs text-muted-foreground">{t("settings.modes.thinking_desc")}</p>
+              </div>
+              <div 
+                onClick={() => handleToggleMode("default_thinking", !defaultThinking)}
+                className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${defaultThinking ? 'bg-primary' : 'bg-muted'}`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ease-in-out transform ${defaultThinking ? 'translate-x-6' : 'translate-x-0'}`} />
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center py-4 border-b">
+              <div className="space-y-1">
+                <span className="text-sm font-medium">{t("settings.modes.search_title")}</span>
+                <p className="text-xs text-muted-foreground">{t("settings.modes.search_desc")}</p>
+              </div>
+              <div 
+                onClick={() => handleToggleMode("default_search", !defaultSearch)}
+                className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${defaultSearch ? 'bg-primary' : 'bg-muted'}`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ease-in-out transform ${defaultSearch ? 'translate-x-6' : 'translate-x-0'}`} />
               </div>
             </div>
           </div>
@@ -232,8 +236,8 @@ curl ${baseUrl}/v1/chat/completions \\
         {/* Model Mapping */}
         <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
           <div className="flex flex-col space-y-1.5 p-6 border-b bg-muted/30">
-            <h3 className="font-semibold leading-none tracking-tight">自动模型映射规则 (Model Aliases)</h3>
-            <p className="text-sm text-muted-foreground">下游传入的模型名称将被网关自动路由至以下千问实际模型。请使用标准 JSON 格式编辑。</p>
+            <h3 className="font-semibold leading-none tracking-tight">{t("settings.aliases.title")}</h3>
+            <p className="text-sm text-muted-foreground">{t("settings.aliases.desc")}</p>
           </div>
           <div className="p-6">
             <textarea 
@@ -243,23 +247,24 @@ curl ${baseUrl}/v1/chat/completions \\
               className="flex min-h-[160px] w-full rounded-md border border-input bg-slate-950 text-slate-300 px-3 py-2 text-sm font-mono"
             />
             <div className="mt-4 flex justify-end">
-              <Button onClick={handleSaveAliases}>保存映射</Button>
+              <Button onClick={handleSaveAliases}>{t("settings.aliases.save")}</Button>
             </div>
           </div>
         </div>
 
-        {/* Usage Example */}
+        {/* Usage Examples */}
         <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
           <div className="flex flex-col space-y-1.5 p-6 border-b bg-muted/30">
             <div className="flex items-center gap-2">
               <Code className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold leading-none tracking-tight">使用示例</h3>
+              <h3 className="font-semibold leading-none tracking-tight">{t("settings.example.title")}</h3>
             </div>
+            <p className="text-sm text-muted-foreground">
+              Exemplos de integração via OpenAI SDK, REST e MCP — copie e substitua <code className="bg-muted px-1 rounded text-xs">YOUR_API_KEY</code>.
+            </p>
           </div>
           <div className="p-6">
-            <div className="bg-slate-950 rounded-lg p-4 text-sm font-mono text-slate-300 overflow-x-auto whitespace-pre">
-              {curlExample}
-            </div>
+            <CodeExamples baseUrl={baseUrl} availableModels={models} />
           </div>
         </div>
       </div>

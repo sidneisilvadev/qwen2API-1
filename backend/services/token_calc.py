@@ -4,14 +4,14 @@ import logging
 log = logging.getLogger("qwen2api.token")
 
 try:
-    # 默认使用 cl100k_base，因为目前这是最通用的 GPT-4 级分词器
+    # Default to cl100k_base as it's the most common GPT-4 level tokenizer
     encoder = tiktoken.get_encoding("cl100k_base")
 except Exception as e:
     log.warning(f"Failed to load tiktoken: {e}")
     encoder = None
 
 def count_tokens(text: str) -> int:
-    """计算文本的精确 Token 数"""
+    """Calculate exact token count for text."""
     if not text:
         return 0
     if encoder:
@@ -23,7 +23,7 @@ def count_tokens(text: str) -> int:
     return max(1, len(text.encode('utf-8')) // 2)
 
 def calculate_usage(prompt: str, completion: str) -> dict:
-    """结算：精确扣费"""
+    """Calculate usage for billing."""
     prompt_tokens = count_tokens(prompt)
     completion_tokens = count_tokens(completion)
     total_tokens = prompt_tokens + completion_tokens

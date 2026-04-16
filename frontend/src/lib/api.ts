@@ -1,8 +1,9 @@
+/// <reference types="vite/client" />
 /**
- * 后端 API 基础地址。
+ * Backend API Base URL.
  *
- * - 本地开发：留空，由 Vite proxy 代理到 http://localhost:7860
- * - Docker 生产：留空，由 nginx proxy 代理到 backend:7860
- * - Vercel / 独立前端：设置 VITE_API_BASE_URL=https://your-backend.example.com
+ * - Local Dev: Leave empty, handled by Vite proxy to http://localhost:7860
+ * - Docker Prod: Leave empty, handled by nginx proxy to backend:7860
+ * - Vercel / Standalone Frontend: Set VITE_API_BASE_URL=https://your-backend.example.com
  */
 export const API_BASE: string = (import.meta.env.VITE_API_BASE_URL as string) ?? ''

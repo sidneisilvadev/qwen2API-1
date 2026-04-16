@@ -1,11 +1,5 @@
 import asyncio
 import logging
-from backend.core.account_pool import AccountPool, Account
-from backend.core.browser_engine import _new_browser
-from backend.core.config import settings
-from backend.core.account_pool import Account
-import logging
-import asyncio
 import random
 import string
 import time
@@ -13,7 +7,9 @@ import json
 import html as html_lib
 import re
 from typing import Optional
-from camoufox.async_api import AsyncCamoufox
+from playwright.async_api import async_playwright
+from backend.core.account_pool import AccountPool, Account
+from backend.core.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -28,28 +24,19 @@ async def _verify_qwen_token(token: str) -> bool:
             "Authorization": f"Bearer {token}",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             "Referer": "https://chat.qwen.ai/",
             "Origin": "https://chat.qwen.ai",
-            "Connection": "keep-alive"
         }
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(f"{BASE_URL}/api/v1/auths/", headers=headers)
-        if resp.status_code != 200:
-            return False
-        try:
-            data = resp.json()
-            return data.get("role") == "user"
-        except Exception:
-            txt = resp.text.lower()
-            return 'aliyun_waf' in txt or '<!doctype' in txt
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get("https://chat.qwen.ai/api/v1/auths/", headers=headers)
+        return resp.status_code == 200
     except Exception:
         return False
 
-from backend.core.browser_engine import _new_browser
+# Removed obsolete browser engine import
 
 async def get_fresh_token(email: str, password: str) -> str:
-    """如果提供了此功能，用 playwright 重新登录获取 Token，这里提供一个 mock 或抛错以防未实现"""
+    """If provided, uses playwright/camoufox to re-login and get token. Mock/Error for now."""
     raise NotImplementedError("Auto-login not fully implemented yet in the separated architecture")
 
 def _gen_password(length=14):
@@ -67,7 +54,6 @@ def _gen_username():
                            "Davis", "Miller", "Garcia", "Martinez", "Anderson", "Taylor", "Thomas"])
     return f"{first} {last}"
 
-MAIL_BASE = "https://mail.chatgpt.org.uk"
 MAIL_LINK_KEYWORDS = ("qwen", "verify", "activate", "confirm", "aliyun", "alibaba", "qwenlm")
 
 async def _extract_verify_link_from_page(page) -> str:
@@ -108,7 +94,8 @@ async def _extract_verify_link_from_page(page) -> str:
 async def _find_verify_link_via_mail_page(email: str) -> str:
     mail_url = f"{MAIL_BASE}/{email}"
     try:
-        async with _new_browser() as browser:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=["--disable-gpu", "--no-sandbox"])
             page = await browser.new_page()
             try:
                 await page.goto(mail_url, wait_until="networkidle", timeout=30000)
@@ -204,7 +191,7 @@ class _EmailSession:
                 self._token_expires_at = auth_data.get("expires_at", 0)
                 self._initialized = True
                 return True
-            # 新增获取 Token 的 fallback 逻辑
+            # Fallback logic to get token
             resp = self._session.get(f"{MAIL_BASE}/api/auth/token", timeout=15)
             if resp.status_code == 200:
                 auth_data = resp.json()
@@ -372,18 +359,18 @@ class _EmailSession:
                     if data.get("auth"):
                         self._set_auth(data.get("auth", {}))
                     emails_list = data.get("data", {}).get("emails", [])
-                    log.info(f"[邮件] 第 {attempt} 次轮询，收到 {len(emails_list)} 封邮件")
+                    log.info(f"[Email] Polling attempt {attempt}, received {len(emails_list)} messages")
                     for msg in emails_list:
                         link = self._extract_verify_link_from_email_record(msg)
                         if link:
-                            log.info(f"[邮件] 找到验证链接：{link[:160]}...")
+                            log.info(f"[Email] Verification link found: {link[:160]}...")
                             return link
                 else:
                     log.warning(f"[MailSession] email API HTTP {resp.status_code}: {resp.text[:120]}")
             except Exception as e:
                 log.warning(f"[MailSession] poll error: {e}")
             time.sleep(2)
-        log.error("[邮件] 轮询超时，未找到验证邮件")
+        log.error("[Email] Polling timeout, verification email not found")
         return ""
 
 class _AsyncMailClient:
@@ -409,24 +396,25 @@ class _AsyncMailClient:
         return await asyncio.to_thread(self._sess.poll_verify_link, email, timeout_sec)
 
 async def register_qwen_account() -> Optional[Account]:
-    log.info("[Register] ── 开始注册流程 ──")
+    log.info("[Register] -- Starting Registration Flow --")
     async with _AsyncMailClient() as mail_client:
-        log.info("[Register] [1/7] 生成临时邮箱...")
+        log.info("[Register] [1/7] Generating temporary email...")
         email = await mail_client.generate_email()
         password = _gen_password()
         username = _gen_username()
-        log.info(f"[Register] [1/7] 邮箱: {email}  用户名: {username}")
+        log.info(f"[Register] [1/7] Email: {email}  Username: {username}")
 
         try:
-            async with _new_browser() as browser:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True, args=["--disable-gpu", "--no-sandbox"])
                 page = await browser.new_page()
-                log.info(f"[Register] [2/7] 打开注册页面: {BASE_URL}/auth?action=signup")
+                log.info(f"[Register] [2/7] Opening signup page: {BASE_URL}/auth?action=signup")
                 try:
                     await page.goto(f"{BASE_URL}/auth?action=signup", wait_until="domcontentloaded", timeout=60000)
                 except Exception as e:
-                    log.warning(f"[Register] [2/7] 页面加载异常: {e}")
+                    log.warning(f"[Register] [2/7] Page load exception: {e}")
 
-                log.info("[Register] [3/7] 填写注册表单...")
+                log.info("[Register] [3/7] Filling registration form...")
                 name_input = None
                 for sel in ['input[placeholder*="Full Name"]', 'input[placeholder*="Name"]']:
                     try:
@@ -438,17 +426,17 @@ async def register_qwen_account() -> Optional[Account]:
                     inputs = await page.query_selector_all('input')
                     name_input = inputs[0] if len(inputs) >= 4 else None
                 if not name_input:
-                    log.error("[Register] [3/7] 找不到姓名输入框，注册中止")
+                    log.error("[Register] [3/7] Name input box not found, registration aborted")
                     return None
 
                 await name_input.click(); await name_input.fill(username)
-                log.info(f"[Register] [3/7]  ✓ 姓名: {username}")
+                log.info(f"[Register] [3/7]  - Name: {username}")
                 email_input = await page.query_selector('input[placeholder*="Email"]')
                 if not email_input:
                     inputs = await page.query_selector_all('input')
                     email_input = inputs[1] if len(inputs) >= 2 else None
                 if email_input: await email_input.click(); await email_input.fill(email)
-                log.info(f"[Register] [3/7]  ✓ 邮箱: {email}")
+                log.info(f"[Register] [3/7]  - Email: {email}")
 
                 pwd_input = await page.query_selector('input[placeholder*="Password"]:not([placeholder*="Again"])')
                 if not pwd_input:
@@ -461,37 +449,37 @@ async def register_qwen_account() -> Optional[Account]:
                     inputs = await page.query_selector_all('input')
                     confirm_input = inputs[3] if len(inputs) >= 4 else None
                 if confirm_input: await confirm_input.click(); await confirm_input.fill(password)
-                log.info("[Register] [3/7]  ✓ 密码已填写")
+                log.info("[Register] [3/7]  - Password filled")
 
                 checkbox = await page.query_selector('input[type="checkbox"]')
                 if checkbox and not await checkbox.is_checked(): await checkbox.click()
                 else:
                     agree = await page.query_selector('text=I agree')
                     if agree: await agree.click()
-                log.info("[Register] [3/7]  ✓ 同意条款")
+                log.info("[Register] [3/7]  - Terms agreed")
 
-                log.info("[Register] [4/7] 提交注册表单...")
+                log.info("[Register] [4/7] Submitting registration form...")
                 await asyncio.sleep(1)
                 submit = await page.query_selector('button:has-text("Create Account")') or await page.query_selector('button[type="submit"]')
                 if submit: await submit.click()
-                log.info("[Register] [4/7] 已点击提交，等待页面跳转（6s）...")
+                log.info("[Register] [4/7] Submitted, waiting for redirect (6s)...")
                 await asyncio.sleep(6)
 
                 url_after = page.url
-                log.info(f"[Register] [4/7] 提交后URL: {url_after}")
+                log.info(f"[Register] [4/7] Post-submission URL: {url_after}")
 
                 # Check if already logged in (redirected to main page)
                 token = None
                 if BASE_URL in url_after and "auth" not in url_after:
-                    log.info("[Register] [5/7] 已跳转主页，尝试直接获取token...")
+                    log.info("[Register] [5/7] Redirected to homepage, attempting direct token retrieval...")
                     await asyncio.sleep(3)
                     token = await page.evaluate("localStorage.getItem('token')")
                     if token:
-                        log.info("[Register] [5/7] ✓ 注册后直接获取到token，跳过邮件验证")
+                        log.info("[Register] [5/7] - Success: token retrieved after registration, skipping email verification")
 
                 # If no token yet, try explicit login with email+password (faster than email poll)
                 if not token:
-                    log.info("[Register] [5/7] 尝试用账号密码直接登录...")
+                    log.info("[Register] [5/7] Attempting direct login with credentials...")
                     try:
                         await page.goto(f"{BASE_URL}/auth", wait_until="domcontentloaded", timeout=30000)
                         await asyncio.sleep(3)
@@ -504,33 +492,33 @@ async def register_qwen_account() -> Optional[Account]:
                         await asyncio.sleep(8)
                         token = await page.evaluate("localStorage.getItem('token')")
                         if token:
-                            log.info("[Register] [5/7] ✓ 直接登录成功，获取到token")
+                            log.info("[Register] [5/7] - Success: Direct login successful")
                     except Exception as e:
-                        log.warning(f"[Register] [5/7] 直接登录失败: {e}")
+                        log.warning(f"[Register] [5/7] Direct login failed: {e}")
 
                 # If still no token, use mailbox email API first, then fall back to page lookup.
                 if not token:
-                    log.info(f"[Register] [6/7] polling mailbox email API for {email}...")
+                    log.info(f"[Register] [6/7] Polling mailbox email API for {email}...")
                     verify_link = await mail_client.get_verify_link(timeout_sec=60)
                     if not verify_link:
-                        log.info(f"[注册] [6/7] 邮件 API 未返回链接，尝试页面方式 {email}")
+                        log.info(f"[Register] [6/7] Email API did not return link, trying page mode for {email}")
                         verify_link = await _find_verify_link_via_mail_page(email)
 
                     if not verify_link:
-                        log.error("[Register] [6/7] verification email not found")
+                        log.error("[Register] [6/7] Verification email not found")
                         return None
 
-                    log.info(f"[Register] [6/7] ✓ 收到验证链接，访问中...")
+                    log.info(f"[Register] [6/7] - Success: Verification link received, visiting...")
                     try:
                         await page.goto(verify_link, wait_until="domcontentloaded", timeout=30000)
                     except Exception: pass
                     await asyncio.sleep(6)
                     token = await page.evaluate("localStorage.getItem('token')")
-                    log.info(f"[Register] [6/7] 验证后URL: {page.url}")
+                    log.info(f"[Register] [6/7] Post-verification URL: {page.url}")
 
                     # Login after verification
                     if not token:
-                        log.info("[Register] [6/7] 验证链接后尝试登录...")
+                        log.info("[Register] [6/7] Attempting login after verification link visit...")
                         try:
                             await page.goto(f"{BASE_URL}/auth", wait_until="domcontentloaded", timeout=30000)
                             await asyncio.sleep(3)
@@ -543,21 +531,21 @@ async def register_qwen_account() -> Optional[Account]:
                             await asyncio.sleep(8)
                             token = await page.evaluate("localStorage.getItem('token')")
                             if token:
-                                log.info("[Register] [6/7] ✓ 验证后登录成功")
+                                log.info("[Register] [6/7] - Success: Verified login")
                         except Exception: pass
 
                 if not token:
-                    log.error("[Register] 所有方法均无法获取token，注册失败")
+                    log.error("[Register] All methods failed to retrieve token, registration failed")
                     return None
 
-                log.info("[Register] [7/7] 提取 cookies...")
+                log.info("[Register] [7/7] Extracting cookies...")
                 all_cookies = await page.context.cookies()
                 cookie_str = "; ".join(f"{c.get('name','')}={c.get('value','')}" for c in all_cookies if "qwen" in c.get("domain", ""))
-                log.info(f"[Register] ✓ 注册完成: {email}")
+                log.info(f"[Register] - Registration Completed: {email}")
                 return Account(email=email, password=password, token=token, cookies=cookie_str, username=username, activation_pending=False)
         except Exception as e:
             import traceback
-            log.error(f"[Register] 注册异常: {e}\n{traceback.format_exc()}")
+            log.error(f"[Register] Registration Exception: {e}\n{traceback.format_exc()}")
             return None
 
 async def _login_and_get_token(page, email: str, password: str, timeout_sec: int = 20) -> str:
@@ -667,12 +655,12 @@ async def activate_account(acc: Account) -> bool:
     started_at = float(getattr(acc, "_activation_started_at", 0) or 0)
     if getattr(acc, "_is_activating", False):
         if started_at and (time.time() - started_at) < 90:
-            log.info(f"[激活] {acc.email} 正在激活中，跳过重复调用")
+            log.info(f"[Activate] {acc.email} activation in progress, skipping")
             return acc.valid and not acc.activation_pending
-        log.warning(f"[激活] {acc.email} 激活超时，重置激活标志重新尝试")
+        log.warning(f"[Activate] {acc.email} activation timeout, resetting flag")
         setattr(acc, "_is_activating", False)
 
-    log.info(f"[激活] 开始激活账号 {acc.email}")
+    log.info(f"[Activate] Starting activation for account {acc.email}")
     setattr(acc, "_is_activating", True)
     setattr(acc, "_activation_started_at", time.time())
     try:
@@ -681,19 +669,20 @@ async def activate_account(acc: Account) -> bool:
             async with _AsyncMailClient() as mail_client:
                 verify_link = await mail_client.get_verify_link_for_email(acc.email, timeout_sec=30)
         except Exception as e:
-            log.warning(f"[激活] {acc.email} 邮件 API 失败: {e}")
+            log.warning(f"[Activate] {acc.email} email API failed: {e}")
 
         if not verify_link:
-            log.info(f"[激活] {acc.email} 邮件 API 未返回链接，使用页面方式")
+            log.info(f"[Activate] {acc.email} email API did not return link, trying page mode")
             verify_link = await _find_verify_link_via_mail_page(acc.email)
 
         if not verify_link:
-            log.warning(f"[Activate] activation email not found for {acc.email}")
+            log.warning(f"[Activate] Activation email not found for {acc.email}")
             return False
 
-        log.info(f"[激活] {acc.email} 找到验证链接：{verify_link[:120]}")
+        log.info(f"[Activate] {acc.email} found verification link: {verify_link[:120]}")
 
-        async with _new_browser() as browser:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True, args=["--disable-gpu", "--no-sandbox"])
             page = await browser.new_page()
             try:
                 await page.goto(verify_link, wait_until="networkidle", timeout=30000)
@@ -705,70 +694,70 @@ async def activate_account(acc: Account) -> bool:
 
             await asyncio.sleep(5)
             token = await page.evaluate("localStorage.getItem('token')")
-            log.info(f"[激活] {acc.email} 访问验证链接后 URL={page.url}，Token：{'有' if token else '无'}")
+            log.info(f"[Activate] {acc.email} post-verification URL={page.url}, Token: {'Present' if token else 'None'}")
 
             if not token and acc.password:
                 try:
                     token = await _login_and_get_token(page, acc.email, acc.password, timeout_sec=20)
                 except Exception as e:
-                    log.warning(f"[激活] {acc.email} 登录获取 token 失败: {e}")
+                    log.warning(f"[Activate] {acc.email} login to retrieve token failed: {e}")
 
             if token:
                 acc.token = token
                 acc.valid = True
                 acc.activation_pending = False
-                log.info(f"[激活] {acc.email} 激活成功")
+                log.info(f"[Activate] {acc.email} activation success")
                 return True
 
             # Some activation links make the original token usable again without issuing a new one.
             if await _verify_qwen_token(acc.token):
                 acc.valid = True
                 acc.activation_pending = False
-                log.info(f"[激活] {acc.email} 旧 Token 仍然有效，激活完成")
+                log.info(f"[Activate] {acc.email} old token still valid, activation finished")
                 return True
 
-            log.warning(f"[激活] {acc.email} 激活失败，无法获取 Token")
+            log.warning(f"[Activate] {acc.email} activation failed, could not retrieve token")
             return False
     except Exception as e:
-        log.error(f"[激活] {acc.email} 激活异常: {e}")
+        log.error(f"[Activate] {acc.email} activation exception: {e}")
         return False
     finally:
         setattr(acc, "_is_activating", False)
         setattr(acc, "_activation_started_at", 0)
 
 class AuthResolver:
-    """自动登录并提取 Token，在检测到 401 时自动自愈凭证"""
+    """Auto-login and token extraction, with self-healing on 401 errors."""
     def __init__(self, pool: AccountPool):
         self.pool = pool
 
     async def auto_heal_account(self, acc: Account):
-        """Background task to refresh token. If successful, marks account valid.
-        If refresh fails or account is pending activation, tries to activate via email."""
+        """Background task to refresh token based on provider."""
         if getattr(acc, "healing", False):
             log.info(f"[BGRefresh] {acc.email} healing already in progress")
             return
 
         acc.healing = True
         try:
+            # Default Qwen Flow (Auto-login / Activation)
             ok = await self.refresh_token(acc)
             if ok:
                 if not getattr(acc, 'activation_pending', False):
                     acc.valid = True
                     await self.pool.save()
-                    log.info(f"[自愈] {acc.email} Token 刷新成功，已标记有效")
+                    log.info(f"[SelfHeal] {acc.email} token refreshed, marked valid")
                     return
                 log.info(f"[BGRefresh] {acc.email} token refreshed but account still needs activation")
             else:
-                log.warning(f"[自愈] {acc.email} Token 刷新失败，尝试激活")
+                log.warning(f"[SelfHeal] {acc.email} token refresh failed, attempting activation")
 
             activated = await activate_account(acc)
             if activated:
                 acc.activation_pending = False
                 acc.valid = True
                 await self.pool.save()
-                log.info(f"[自愈] {acc.email} 激活成功，已保存")
+                log.info(f"[SelfHeal] {acc.email} activation successful, saved")
             else:
-                log.warning(f"[自愈] {acc.email} 激活失败")
+                log.warning(f"[SelfHeal] {acc.email} activation failed")
         except Exception as e:
             log.warning(f"[BGRefresh] {acc.email} auto heal failed: {e}")
         finally:
@@ -778,29 +767,30 @@ class AuthResolver:
 
         """Re-login with email+password to get a fresh token. Returns True on success."""
         if not acc.email or not acc.password:
-            log.warning(f"[Refresh] 账号 {acc.email} 无密码，无法刷新")
+            log.warning(f"[Refresh] Account {acc.email} has no password, cannot refresh")
             return False
             
-        log.info(f"[Refresh] 正在为 {acc.email} 刷新 token...")
+        log.info(f"[Refresh] Refreshing token for {acc.email}...")
         try:
-            async with _new_browser() as browser:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True, args=["--disable-gpu", "--no-sandbox"])
                 page = await browser.new_page()
                 new_token = await _login_and_get_token(page, acc.email, acc.password, timeout_sec=20)
                 if new_token and new_token != acc.token:
-                    old_prefix = acc.token[:20] if acc.token else "空"
+                    old_prefix = acc.token[:20] if acc.token else "None"
                     acc.token = new_token
                     acc.valid = True
                     await self.pool.save()
-                    log.info(f"[Refresh] {acc.email} token 已更新 ({old_prefix}... → {new_token[:20]}...)")
+                    log.info(f"[Refresh] {acc.email} token updated ({old_prefix}... -> {new_token[:20]}...)")
                     return True
                 elif new_token == acc.token:
-                    # Token same but might still be valid — mark valid again
+                    # Token same but might still be valid - mark valid again
                     acc.valid = True
-                    log.info(f"[Refresh] {acc.email} token 未变化，重新标记有效")
+                    log.info(f"[Refresh] {acc.email} token unchanged, marked valid")
                     return True
                 else:
-                    log.warning(f"[Refresh] {acc.email} 登录后未获取到token，URL={page.url}")
+                    log.warning(f"[Refresh] {acc.email} No token received after login, URL={page.url}")
                     return False
         except Exception as e:
-            log.error(f"[Refresh] {acc.email} 刷新异常: {e}")
+            log.error(f"[Refresh] {acc.email} Token refresh exception: {e}")
             return False

@@ -2,7 +2,7 @@
 hybrid_engine.py — mix browser stability with httpx speed.
 Phase 1 policy:
 - api_call: httpx first, browser fallback on failures
-- fetch_chat: browser first (real browser TLS/env), httpx fallback on browser failures
+- fetch_chat: httpx first (Phantom mode), browser fallback on failures
 """
 
 import logging
@@ -20,12 +20,12 @@ class HybridEngine:
         self._pages = getattr(browser_engine, "_pages", None)
 
     async def start(self):
-        log.info("[HybridEngine] 启动开始：先启动 httpx 引擎")
+        log.info("[HybridEngine] Starting: Initializing httpx engine first")
         await self.httpx_engine.start()
-        log.info("[HybridEngine] 第一步完成：httpx 已启动，继续启动浏览器引擎")
+        log.info("[HybridEngine] Step 1 complete: httpx started, now starting browser engine")
         await self.browser_engine.start()
         self._started = bool(getattr(self.httpx_engine, "_started", False) and getattr(self.browser_engine, "_started", False))
-        log.info(f"[HybridEngine] 已启动：api_call=httpx优先，fetch_chat=browser优先，started={self._started} browser_started={getattr(self.browser_engine, '_started', False)} httpx_started={getattr(self.httpx_engine, '_started', False)}")
+        log.info(f"[HybridEngine] Started: api_call=httpx_first, fetch_chat=httpx_first, started={self._started} browser_started={getattr(self.browser_engine, '_started', False)} httpx_started={getattr(self.httpx_engine, '_started', False)}")
 
     async def stop(self):
         try:
@@ -33,11 +33,11 @@ class HybridEngine:
         finally:
             await self.browser_engine.stop()
         self._started = False
-        log.info("[HybridEngine] 已停止")
+        log.info("[HybridEngine] Stopped")
 
-    async def api_call(self, method: str, path: str, token: str, body: dict = None) -> dict:
-        log.info(f"[HybridEngine] api_call 路由：优先走 httpx，method={method} path={path}")
-        result = await self.httpx_engine.api_call(method, path, token, body)
+    async def api_call(self, method: str, path: str, token: str, body: dict = None, cookies: str = None) -> dict:
+        log.info(f"[HybridEngine] Routing api_call: prioritizing httpx, method={method} path={path}")
+        result = await self.httpx_engine.api_call(method, path, token, body, cookies=cookies)
         status = result.get("status")
         body_text = (result.get("body") or "").lower()
         should_fallback = (
@@ -50,53 +50,47 @@ class HybridEngine:
         )
         if should_fallback:
             preview = (result.get("body") or "")[:160].replace("\n", "\\n")
-            log.warning(f"[HybridEngine] api_call 回退到 browser，method={method} path={path} status={status} body_preview={preview!r}")
-            return await self.browser_engine.api_call(method, path, token, body)
-        log.info(f"[HybridEngine] api_call 实际由 httpx 完成，method={method} path={path} status={status}")
+            log.warning(f"[HybridEngine] api_call fallback to browser, method={method} path={path} status={status} body_preview={preview!r}")
+            return await self.browser_engine.api_call(method, path, token, body, cookies=cookies)
+        log.info(f"[HybridEngine] api_call handled by httpx, method={method} path={path} status={status}")
         return result
 
-    async def fetch_chat(self, token: str, chat_id: str, payload: dict, buffered: bool = False):
-        log.info(f"[HybridEngine] fetch_chat 路由：优先走 browser，chat_id={chat_id} buffered={buffered}")
+    async def fetch_chat(self, token: str, chat_id: str, payload: dict, buffered: bool = False, cookies: str = None):
+        log.info(f"[HybridEngine] Routing fetch_chat: prioritizing httpx (Phantom Engine), chat_id={chat_id}")
         saw_success = False
-        browser_error = None
+        httpx_error = None
         try:
-            async for item in self.browser_engine.fetch_chat(token, chat_id, payload, buffered=buffered):
+            async for item in self.httpx_engine.fetch_chat(token, chat_id, payload, buffered=buffered, cookies=cookies):
                 status = item.get("status")
                 if status in ("streamed", 200):
                     saw_success = True
                     yield item
                     continue
-                # 浏览器返回错误，判断是否需要回退
+                # Potential WAF/403/Forbidden from HTTPX
                 body_text = (item.get("body") or "").lower()
-                is_hard_failure = (
+                is_blocked = (
                     status in (401, 403, 429)
                     or "waf" in body_text
-                    or "<!doctype" in body_text
                     or "forbidden" in body_text
-                    or "unauthorized" in body_text
                 )
-                if is_hard_failure and not saw_success:
-                    browser_error = item
-                    break
-                # 浏览器引擎自身错误（evaluate失败等），也回退
-                if status == 0 and not saw_success:
-                    browser_error = item
+                if is_blocked and not saw_success:
+                    httpx_error = item
                     break
                 yield item
-            if browser_error is None:
+            if httpx_error is None:
                 return
         except Exception as e:
             if saw_success:
                 return
-            browser_error = {"status": 0, "body": str(e)}
+            httpx_error = {"status": 0, "body": str(e)}
 
-        preview = ((browser_error.get("body") or "")[:160]).replace("\n", "\\n") if isinstance(browser_error, dict) else str(browser_error)[:160]
+        preview = ((httpx_error.get("body") or "")[:160]).replace("\n", "\\n") if isinstance(httpx_error, dict) else str(httpx_error)[:160]
         log.warning(
-            f"[HybridEngine] fetch_chat browser 失败，回退到 httpx：chat_id={chat_id} "
-            f"status={browser_error.get('status') if isinstance(browser_error, dict) else 'unknown'} "
+            f"[HybridEngine] fetch_chat httpx failed, falling back to browser (Visual Warmup): chat_id={chat_id} "
+            f"status={httpx_error.get('status') if isinstance(httpx_error, dict) else 'unknown'} "
             f"body_preview={preview!r}"
         )
-        async for item in self.httpx_engine.fetch_chat(token, chat_id, payload, buffered=buffered):
+        async for item in self.browser_engine.fetch_chat(token, chat_id, payload, buffered=buffered, cookies=cookies):
             yield item
 
     def status(self) -> dict:
@@ -112,7 +106,8 @@ class HybridEngine:
         return {
             "started": self._started,
             "mode": "hybrid",
-            "stream_via": "browser_first",
+            "status_v3": "phantom_priority",
+            "stream_via": "httpx_first",
             "api_via": "httpx_first",
             "browser_started": getattr(self.browser_engine, "_started", False),
             "httpx_started": getattr(self.httpx_engine, "_started", False),

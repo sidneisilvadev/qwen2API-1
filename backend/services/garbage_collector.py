@@ -7,19 +7,19 @@ log = logging.getLogger("qwen2api.gc")
 
 async def garbage_collect_chats(client: QwenClient):
     """
-    后台守护进程：每隔 15 分钟遍历所有存活的账号，
-    调用千问列表接口，删除由 API 产生且已成为孤儿的对话 (title 包含 api_)。
-    正在被活跃请求使用的 chat_id 不会被删除。
+    Background daemon: every 15 minutes, checks all active accounts.
+    Calls Qwen API to list and delete orphan chats created by the API (title starts with 'api_').
+    Active chat_ids currently being used by requests are skipped.
     """
     while True:
         await asyncio.sleep(900)  # 15分钟
-        log.info("[GC] 开始自动焚烧孤儿会话...")
+        log.info("[GC] Starting automatic orphan chat cleanup...")
         pool = client.account_pool
         for acc in pool.accounts:
             if not acc.is_available():
                 continue
             try:
-                # 获取会话列表
+                # Fetch chat list
                 res = await client.engine.api_call("GET", "/api/v2/chats?limit=50", acc.token)
                 if isinstance(res, dict) and res.get("status") == 200:
                     data = json.loads(res.get("body", "{}"))
@@ -30,9 +30,9 @@ async def garbage_collect_chats(client: QwenClient):
                                 if isinstance(c, dict) and c.get("title", "").startswith("api_"):
                                     chat_id = c["id"]
                                     if chat_id in client.active_chat_ids:
-                                        log.info(f"[GC] 跳过活跃会话 {chat_id}，正在使用中")
+                                        log.info(f"[GC] Skipping active chat {chat_id}, currently in use")
                                         continue
-                                    # 异步焚烧
+                                    # Async delete
                                     asyncio.create_task(client.delete_chat(acc.token, chat_id))
             except Exception as e:
-                log.warning(f"[GC] 账号 {acc.email} 焚烧失败: {e}")
+                log.warning(f"[GC] Failed to cleanup account {acc.email}: {e}")

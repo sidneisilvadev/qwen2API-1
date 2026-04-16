@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Request, Depends, HTTPException
 from backend.api.admin import verify_admin
-from backend.core.database import AsyncJsonDB
+from backend.core.sqlite_db import AsyncSQLiteDB
+import json
 
 router = APIRouter()
 
@@ -22,11 +23,23 @@ async def readyz(request: Request):
 
 @router.get("/admin/dev/captures", dependencies=[Depends(verify_admin)])
 async def get_captures(request: Request):
-    db: AsyncJsonDB = request.app.state.captures_db
-    return {"captures": await db.get()}
+    db: AsyncSQLiteDB = request.app.state.db
+    rows = await db.fetch_all("SELECT * FROM captures ORDER BY created_at DESC")
+    # Convert string JSON data back to dicts for output
+    results = []
+    for r in rows:
+        item = dict(r)
+        if isinstance(item.get("data"), str):
+            try:
+                item["data"] = json.loads(item["data"])
+            except:
+                pass
+        results.append(item)
+    return {"captures": results}
 
 @router.delete("/admin/dev/captures", dependencies=[Depends(verify_admin)])
 async def clear_captures(request: Request):
-    db: AsyncJsonDB = request.app.state.captures_db
-    await db.save([])
+    db: AsyncSQLiteDB = request.app.state.db
+    await db.execute("DELETE FROM captures")
+    await db.commit()
     return {"status": "cleared"}

@@ -1,8 +1,5 @@
 """
-图片生成接口 — 兼容 OpenAI /v1/images/generations 规范。
-
-底层通过千问网页当前真实的“生成图像”模式触发，而不是写死 wanx 模型名。
-页面实测结果显示：UI 仍显示 `Qwen3.6-Plus`，并通过“生成图像”模式完成图片生成。
+Image Generation API - compatible with OpenAI /v1/images/generations specification.
 """
 import re
 import time
@@ -11,58 +8,54 @@ import logging
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 from backend.services.qwen_client import QwenClient
+from backend.core.config import settings
+from backend.core.sqlite_db import AsyncSQLiteDB
 
 log = logging.getLogger("qwen2api.images")
 router = APIRouter()
 
-# 默认图片生成模型：网页实测仍显示为 Qwen3.6-Plus
-DEFAULT_IMAGE_MODEL = "qwen3.6-plus"
-
-# 受支持的图片模型别名 -> 网页真实可用的基础模型
+DEFAULT_IMAGE_MODEL = "qwen-max-latest"
 IMAGE_MODEL_MAP = {
-    "dall-e-3": "qwen3.6-plus",
-    "dall-e-2": "qwen3.6-plus",
-    "qwen-image": "qwen3.6-plus",
-    "qwen-image-plus": "qwen3.6-plus",
-    "qwen-image-turbo": "qwen3.6-plus",
-    "qwen3.6-plus": "qwen3.6-plus",
+    "dall-e-3": "qwen-max-latest",
+    "dall-e-2": "qwen-max-latest",
+    "qwen-image": "qwen-max-latest",
+    "qwen-image-plus": "qwen-max-latest",
+    "qwen-image-turbo": "qwen-max-latest",
+    "qwen-max": "qwen-max-latest",
 }
 
-
 def _extract_image_urls(text: str) -> list[str]:
-    """从模型输出中提取图片 URL（支持 Markdown、JSON 字段、裸 URL 三种格式）"""
-    urls: list[str] = []
-
-    # 1. Markdown 图片语法: ![...](url)
-    for u in re.findall(r'!\[.*?\]\((https?://[^\s\)]+)\)', text):
-        urls.append(u.rstrip(").,;"))
-
-    # 2. JSON 字段: "url":"...", "image":"...", "src":"..."
-    if not urls:
-        for u in re.findall(r'"(?:url|image|src|imageUrl|image_url)"\s*:\s*"(https?://[^"]+)"', text):
-            urls.append(u)
-
-    # 3. 裸 URL（以常见图片扩展名结尾，或来自已知 CDN）
-    if not urls:
-        cdn_pattern = r'https?://(?:cdn\.qwenlm\.ai|wanx\.alicdn\.com|img\.alicdn\.com|[^\s"<>]+\.(?:jpg|jpeg|png|webp|gif))[^\s"<>]*'
-        for u in re.findall(cdn_pattern, text, re.IGNORECASE):
-            urls.append(u.rstrip(".,;)\"'>"))
-
-    # 去重并保留顺序
-    seen: set[str] = set()
-    result: list[str] = []
-    for u in urls:
-        if u not in seen:
-            seen.add(u)
-            result.append(u)
-    return result
-
+    import re
+    urls = []
+    # 1. Padrão Markdown ![alt](url)
+    urls.extend(re.findall(r'!\[.*?\]\((https?://.*?)\)', text))
+    
+    # 2. Padrão URL crua de domínios conhecidos da Qwen (inclusive subdomínios ali-)
+    urls.extend(re.findall(r'(https?://(?:cdn|oss|ali-cdn|ali-oss)\.qwenlm\.ai/[^\s\)\"\'>]+)', text))
+        
+    # 3. Padrão de URL genérica se terminar em extensão de imagem
+    urls.extend(re.findall(r'(https?://[^\s\)\"\'>]+\.(?:png|jpg|jpeg|webp|gif|svg|bmp))', text))
+        
+    # Limpeza e unicidade baseada no path (evita duplicatas com/sem query params)
+    by_base = {}
+    for url in urls:
+        # Remove apenas caracteres que visivelmente pertencem ao markup (Markdown/HTML)
+        u = url.strip().rstrip(")>\"'")
+        if not u.startswith("http"):
+            continue
+        
+        # Remove query params para identificar o arquivo base
+        base = u.split('?')[0]
+        # Mantém a versão mais longa (provavelmente a que tem o token de acesso ?key=)
+        if base not in by_base or len(u) > len(by_base[base]):
+            by_base[base] = u
+            
+    return list(by_base.values())
 
 def _resolve_image_model(requested: str | None) -> str:
     if not requested:
         return DEFAULT_IMAGE_MODEL
     return IMAGE_MODEL_MAP.get(requested, DEFAULT_IMAGE_MODEL)
-
 
 def _get_token(request: Request) -> str:
     auth = request.headers.get("Authorization", "")
@@ -70,32 +63,31 @@ def _get_token(request: Request) -> str:
         return auth[7:].strip()
     return request.headers.get("x-api-key", "").strip()
 
-
 @router.post("/v1/images/generations")
 @router.post("/images/generations")
 async def create_image(request: Request):
-    """
-    OpenAI 兼容的图片生成接口。
-
-    请求体示例:
-    ```json
-    {
-      "prompt": "一只赛博朋克风格的猫",
-      "model": "dall-e-3",
-      "n": 1,
-      "size": "1024x1024",
-      "response_format": "url"
-    }
-    ```
-    """
-    from backend.core.config import API_KEYS, settings
+    db: AsyncSQLiteDB = request.app.state.db
     client: QwenClient = request.app.state.qwen_client
 
-    # 鉴权
+    # Unified SQLite Auth
     token = _get_token(request)
-    if API_KEYS:
-        if token != settings.ADMIN_KEY and token not in API_KEYS:
-            raise HTTPException(status_code=401, detail="Invalid API Key")
+    admin_k = settings.ADMIN_KEY
+    
+    user = None
+    if token == admin_k:
+        user = {"id": token, "name": "Master Admin", "quota": 999999999, "used_tokens": 0}
+    else:
+        is_admin = await db.fetch_one("SELECT key FROM admin_keys WHERE key = ?", (token,))
+        if is_admin:
+            user = {"id": token, "name": "Dynamic Admin", "quota": 999999999, "used_tokens": 0}
+        else:
+            is_valid_key = await db.fetch_one("SELECT key FROM api_keys WHERE key = ?", (token,))
+            if not is_valid_key:
+                raise HTTPException(status_code=401, detail="Invalid API Key")
+            user = await db.fetch_one("SELECT * FROM users WHERE id = ?", (token,))
+
+    if user and user.get("quota", 0) <= user.get("used_tokens", 0):
+        raise HTTPException(status_code=402, detail="Quota Exceeded")
 
     try:
         body = await request.json()
@@ -106,34 +98,58 @@ async def create_image(request: Request):
     if not prompt:
         raise HTTPException(400, "prompt is required")
 
-    n: int = min(max(int(body.get("n", 1)), 1), 4)  # 最多 4 张
-    model = _resolve_image_model(body.get("model"))
+    n: int = min(max(int(body.get("n", 1)), 1), 4)
+    # [FIX] Use qwen-max as default, it's more stable for T2I rooms
+    model = body.get("model") or "qwen-max"
+    
+    # Resolve against discovered models if possible
+    model = resolve_model(model, getattr(client.account_pool, "discovered_models", []))
 
     log.info(f"[T2I] model={model}, n={n}, prompt={prompt[:80]!r}")
 
+    all_image_urls = []
+    last_answer_parts = []
+
     try:
-        answer_text, acc, chat_id = await client.image_generate_with_retry(model, prompt)
+        max_attempts = n + 1
+        attempts = 0
+        
+        while len(all_image_urls) < n and attempts < max_attempts:
+            attempts += 1
+            remaining = n - len(all_image_urls)
+            try:
+                answer_text, acc, chat_id = await client.image_generate_with_retry(model, prompt, n=remaining)
+                
+                urls = _extract_image_urls(answer_text)
+                for u in urls:
+                    if u not in all_image_urls:
+                        all_image_urls.append(u)
+                
+                last_answer_parts.append(answer_text)
+                asyncio.create_task(client.delete_chat(acc.token, chat_id))
+                client.account_pool.release(acc)
+            except Exception as e:
+                log.warning(f"[T2I] Attempt {attempts} failed: {e}")
+                if attempts >= max_attempts:
+                    raise
 
-        # 后台清理会话
-        client.account_pool.release(acc)
-        asyncio.create_task(client.delete_chat(acc.token, chat_id))
+        if not all_image_urls:
+            raw_combined = "\n".join(last_answer_parts)
+            log.warning(f"[T2I] Failed to extract any image URLs. Raw response: {raw_combined[:300]!r}")
+            # If no URLs but we have answer text, maybe it's a safety block or error message from Qwen
+            raise HTTPException(status_code=500, detail=f"No image URLs found. Response: {raw_combined[:100]}")
 
-        # 提取图片 URL
-        image_urls = _extract_image_urls(answer_text)
-        log.info(f"[T2I] 提取到 {len(image_urls)} 张图片 URL: {image_urls}")
+        # Usage update
+        if user and token != admin_k:
+            await db.execute("UPDATE users SET used_tokens = used_tokens + ? WHERE id = ?", 
+                           (len("\n".join(last_answer_parts)) + len(prompt), token))
+            await db.commit()
 
-        if not image_urls:
-            log.warning(f"[T2I] 未能提取图片 URL，原始响应: {answer_text[:300]!r}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Image generation succeeded but no URL found. Raw response: {answer_text[:200]}"
-            )
-
-        data = [{"url": url, "revised_prompt": prompt} for url in image_urls[:n]]
+        data = [{"url": url, "revised_prompt": prompt} for url in all_image_urls[:n]]
         return JSONResponse({"created": int(time.time()), "data": data})
 
     except HTTPException:
         raise
     except Exception as e:
-        log.error(f"[T2I] 生成失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"[T2I] Fatal Error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
